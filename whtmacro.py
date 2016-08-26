@@ -57,6 +57,25 @@ def opt_include(param,env):
             yield open(f,"r").read()
     return "".join(iterfile(param)).strip();
 
+#Plugin: import module
+@decoOptPart("module")
+def opt_maodule(param,env):
+    parseMName = re.compile("^[_a-zA-Z][_a-zA-Z0-9]*(\.[_a-zA-Z][_a-zA-Z0-9]*)*$").match
+    #Import module list
+    def imp_modules(mlist):
+        for m in mlist:
+            if not parseMName(m):
+                raise ExcModName(m,env["file"],env["pos"])
+            try:
+                mget = __import__(m,None,None,["WHTEntry"])
+            except:
+                raise ExcModImp(m,env["file"],env["pos"])
+            if not hasattr(mget,"WHTEntry"):
+                raise ExcModImp(m,env["file"],env["pos"])
+            decoOptPart(m)(mget.WHTEntry)
+        return ""
+    return imp_modules(param)
+
 #Plugin: variable set
 @decoOptPart("set")
 def opt_set(param,env):
@@ -87,6 +106,7 @@ def processfiles(filelist):
                 raise ExcFileError(f)
             start = 0
             fdata = open(f,"r").read()
+            fdata = fdata.replace("\r\n","\n").replace("\r","\n")
             pnode = PARSETAG(fdata)
             for pone in pnode:
                 pickdata = fdata[start:pone.start()]
