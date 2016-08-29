@@ -1,8 +1,8 @@
-#!/usr/bin/python
 # -*- coding: utf-8 -*-
 
 '''
 Wonderland HTML file template
+Initialize module
 ------------------------------
 Fiathu Su(fiathux@gmail.com)
 2015-2016
@@ -99,6 +99,15 @@ def opt_get(param,env):
 #Import process
 def processfiles(filelist):
     PARSETAG = re.compile("<\((\"([^\"]|[^\\\\]\\\\\")*\"(\s*,\s*(\"([^\"]|[^\\\\]\\\\\")*\"|[0-9]+(.[0-9]+)*))*)\)>").finditer
+    def iterLineLen(lineStr): 
+        pos = 0
+        for lnindex in xrange(0,len(lineStr)):
+            linelen = len(lineStr[lnindex])
+            yield (pos,linelen)
+            pos = pos + linelen + 1
+    def scanLine(lineStr):
+        iterLineLen(lineStr)
+        
     #Parse file element
     def iterfile(fli):
         for f in fli:
@@ -106,7 +115,7 @@ def processfiles(filelist):
                 raise ExcFileError(f)
             start = 0
             fdata = open(f,"r").read()
-            fdata = fdata.replace("\r\n","\n").replace("\r","\n")
+            fdata = map(lambda instr:instr.strip(),fdata.replace("\r\n","\n").replace("\r","\n").split("\n"))
             pnode = PARSETAG(fdata)
             for pone in pnode:
                 pickdata = fdata[start:pone.start()]
