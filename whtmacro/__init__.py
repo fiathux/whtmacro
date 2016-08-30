@@ -13,6 +13,7 @@ import sys
 import os.path
 import re
 import json
+import time
 from whtmacro.searchTree import SearchRBTree
 
 OPTLIST = {}
@@ -107,6 +108,21 @@ def opt_get(param,env):
     if "varb" not in env or param[0] not in env["varb"]:
         raise ExcCMDVerbFound(env["file"],env["pos"],param[0])
     return env["varb"][param[0]].encode("utf-8")
+
+@decoOptPart("date")
+def opt_date(param,env):
+    persetFmt = {
+            "+":"%Y-%m-%d %H:%M:%S %Z",
+            "simple":"%Y-%m-%d",
+            "simple+":"%Y-%m-%d %H:%M:%S %Z",
+            "chinese":"%Y年%m月%d日",
+            "chinese+":"%Y年%m月%d日 %H时%M分%S秒 %Z",
+            "english":"%a, %b %m %Y",
+            "english+":"%a, %b %m %Y %H:%M:%S %Z"
+            }
+    if len(param) < 1 or param[0] not in persetFmt: fmt = persetFmt["simple"]
+    else: fmt = persetFmt[param[0]]
+    return time.strftime(fmt,time.localtime())
 
 #Import process
 def processfiles(filelist):

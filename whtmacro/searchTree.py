@@ -3,7 +3,6 @@
 '''
 Wonderland HTML file template
 Order-tree module
-This module 
 ------------------------------
 Fiathu Su(fiathux@gmail.com)
 2015-2016
