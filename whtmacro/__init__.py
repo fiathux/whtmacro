@@ -7,11 +7,13 @@ Initialize module
 Fiathu Su(fiathux@gmail.com)
 2015-2016
 '''
+from __future__ import print_function
 
 import sys
 import os.path
 import re
 import json
+from whtmacro.searchTree import SearchRBTree
 
 OPTLIST = {}
 ENV = {}
@@ -20,21 +22,31 @@ ENV = {}
 def help():
     print("whtmacro filelist...")
 
+#Exceptions {{{
 class ExcFileError(Exception):
     def __init__(me,fname):
         me.message = "Invalid file name: " + fname
 
 class ExcCMDError(Exception):
     def __init__(me,fname,cmd,pos):
-        me.message = "Unknown command [%s] in file \"%s\" pos %d" % (cmd,fname,pos)
+        me.message = "Unknown command [%s] in file \"%s\" pos ln:%d - col:%d" % (cmd,fname,pos[0],pos[1])
 
 class ExcCMDParam(Exception):
     def __init__(me,fname,pos):
-        me.message = "Paramete error in file \"%s\" pos %d" % (fname,pos)
+        me.message = "Paramete error in file \"%s\" pos ln:%d - col:%d" % (fname,pos[0],pos[1])
 
 class ExcCMDVerbFound(Exception):
     def __init__(me,fname,pos,vname):
-        me.message = "Undefined variable name [%s] in file \"%s\" pos %d" % (vname,fname,pos)
+        me.message = "Undefined variable name [%s] in file \"%s\" pos ln:%d - col:%d" % (vname,fname,pos[0],pos[1])
+
+class ExcModName(Exception):
+    def __init__(me,mname,fname,pos):
+        me.message = "Invaild module name [%s] in file \"%s\" pos ln:%d - col:%d" % (mname,fname,pos[0],pos[1])
+
+class ExcModImp(Exception):
+    def __init__(me,mname,fname,pos):
+        me.message = "Can not import module [%s] in file \"%s\" pos ln:%d - col:%d" % (mname,fname,pos[0],pos[1])
+#}}}
 
 # Opt-plugins decorate
 def decoOptPart(name):
@@ -99,15 +111,25 @@ def opt_get(param,env):
 #Import process
 def processfiles(filelist):
     PARSETAG = re.compile("<\((\"([^\"]|[^\\\\]\\\\\")*\"(\s*,\s*(\"([^\"]|[^\\\\]\\\\\")*\"|[0-9]+(.[0-9]+)*))*)\)>").finditer
+    #Scan lines position and make index {{{
     def iterLineLen(lineStr): 
         pos = 0
         for lnindex in xrange(0,len(lineStr)):
             linelen = len(lineStr[lnindex])
-            yield (pos,linelen)
+            #( key: (range_start, range_end), value: (line_num, range_start, len) )
+            yield ((pos,pos+linelen),(lnindex,pos,linelen))
             pos = pos + linelen + 1
     def scanLine(lineStr):
-        iterLineLen(lineStr)
-        
+        #Order-tree index
+        lnSearch = SearchRBTree(lambda a,b:
+                0 if ((a[0]>=b[0] and a[1]<=b[1]) or
+                    (b[0]>=a[0] and b[1]<=a[1])) else 1 if a[0]>b[0] else -1
+                )
+        for lineRange,lnInfo in iterLineLen(lineStr):
+            lnSearch.add(lineRange,lnInfo)
+        return lnSearch
+    #}}}
+
     #Parse file element
     def iterfile(fli):
         for f in fli:
@@ -116,13 +138,15 @@ def processfiles(filelist):
             start = 0
             fdata = open(f,"r").read()
             fdata = map(lambda instr:instr.strip(),fdata.replace("\r\n","\n").replace("\r","\n").split("\n"))
+            schline = scanLine(fdata) # make line-number index
+            fdata = "\n".join(fdata)
             pnode = PARSETAG(fdata)
             for pone in pnode:
                 pickdata = fdata[start:pone.start()]
                 start = pone.end()
                 parse = json.loads("["+pone.group(1)+"]")
                 yield pickdata
-                yield (parse,pone,f)
+                yield (parse,pone,f,schline.find((pone.start(),pone.start())))
             yield fdata[start:]
     #Parse opt-plugins
     def iterDoParse():
@@ -131,19 +155,19 @@ def processfiles(filelist):
                 yield(ele)
             else:
                 ENV["file"] = ele[2]
-                ENV["pos"] = ele[1].start()
+                ENV["pos"] = (ele[3][0] + 1, ele[1].start() - ele[3][1] + 1)
                 if ele[0][0] not in OPTLIST:
                     raise ExcCMDError(ENV["file"],ele[0][0],ENV["pos"])
                 yield OPTLIST[ele[0][0]](ele[0][1:],ENV)
-    #print([s for s in iterDoParse()])
     return "".join(iterDoParse()).strip()
 
-#Entry
-args = sys.argv[1:]
-if not args or args[0] in {"-h","--help"}:
-    help()
-else:
-    try:
-        print(processfiles(args))
-    except Exception as e:
-        print("error - " + e.message);
+def main():
+    #Entry
+    args = sys.argv[1:]
+    if not args or args[0] in {"-h","--help"}:
+        help()
+    else:
+        try:
+            print(processfiles(args))
+        except Exception as e:
+            print("error - " + e.message, file=sys.stderr)
