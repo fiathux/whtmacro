@@ -161,10 +161,10 @@ def opt_date(param):
         time_src = time.gmtime
         fmt = "%%".join(map(lambda a: re.sub("%Z","GMT",a),fmt.split("%%")))
     else: time_src = time.localtime
-    if type(fmt).__name__ == "unicode":
+    if type(fmt).__name__ == "unicode": #for python2
         fmt=fmt.encode("utf-8")
         return time.strftime(fmt,time_src()).decode("utf-8")
-    else:
+    else:#for python3
         return time.strftime(fmt,time_src())
 
 #}}}
@@ -212,7 +212,7 @@ def processfiles(filelist):
     #Parse opt-plugins
     def iterDoParse():
         for ele in iterfile(filelist):
-            if type(ele).__name__ == "unicode" or type(ele) == str:
+            if type(ele).__name__ == "unicode" or type(ele) == str: # python2 for "unicode" and python3 for "str"
                 yield(ele)
             else:
                 ENV["docpos"] = DocPosition(ele[2], ele[3][0] + 1, ele[1].start() - ele[3][1] + 1)
