@@ -8,46 +8,80 @@ Fiathu Su(fiathux@gmail.com)
 2015-2016
 '''
 from __future__ import print_function
+from __future__ import unicode_literals
 
 import sys
+import os
 import os.path
 import re
 import json
 import time
+from collections import namedtuple
 from whtmacro.searchTree import SearchRBTree
 
 OPTLIST = {}
 ENV = {}
 
+MAX_IMPORT_DEPTH = 20
+
+# Add default extension path in current work-directory
+def setDefaultExtPath():
+    if os.name == "nt": pSplit = "\\"
+    else: pSplit = "/"
+    workdir = os.getcwd()
+    if workdir[-1] != pSplit:
+        workdir = workdir + pSplit
+    sys.path.append(workdir + "whtmacro-ext")
+setDefaultExtPath()
+
 # Print help text
 def help():
     print("whtmacro filelist...")
 
-#Exceptions {{{
-class ExcFileError(Exception):
+# Position of command in document
+class DocPosition(namedtuple("DocPosition",["file","ln","col"])):
+    __slots__ = ()
+    def __str__(me):
+        return "file: \"%s\" - line: %d - col: %d" % me
+
+# Exceptions {{{
+class ExcWHTBase(Exception):
+    @staticmethod
+    def doc_pos():
+        return ENV["docpos"]
+
+class ExcFileError(ExcWHTBase):
     def __init__(me,fname):
-        me.message = "Invalid file name: " + fname
+        me.message = "Invalid file name \"%s\"" % (fname)
+        if "docpos" in ENV:
+            me.message = me.message + (" in %s" % (me.doc_pos(),))
 
-class ExcCMDError(Exception):
-    def __init__(me,fname,cmd,pos):
-        me.message = "Unknown command [%s] in file \"%s\" pos ln:%d - col:%d" % (cmd,fname,pos[0],pos[1])
+class ExcCMDError(ExcWHTBase):
+    def __init__(me,cmd):
+        me.message = "Unknown command [%s] in %s" % (cmd,me.doc_pos())
 
-class ExcCMDParam(Exception):
-    def __init__(me,fname,pos):
-        me.message = "Paramete error in file \"%s\" pos ln:%d - col:%d" % (fname,pos[0],pos[1])
+class ExcCMDParam(ExcWHTBase):
+    def __init__(me):
+        me.message = "Paramete error in %s" % (me.doc_pos(),)
 
-class ExcCMDVerbFound(Exception):
-    def __init__(me,fname,pos,vname):
-        me.message = "Undefined variable name [%s] in file \"%s\" pos ln:%d - col:%d" % (vname,fname,pos[0],pos[1])
+class ExcCMDVerbFound(ExcWHTBase):
+    def __init__(me,vname):
+        me.message = "Undefined variable name [%s] in %s" % (vname,me.doc_pos())
 
-class ExcModName(Exception):
-    def __init__(me,mname,fname,pos):
-        me.message = "Invaild module name [%s] in file \"%s\" pos ln:%d - col:%d" % (mname,fname,pos[0],pos[1])
+class ExcModName(ExcWHTBase):
+    def __init__(me,mname):
+        me.message = "Invaild module name [%s] in %s" % (mname,me.doc_pos())
 
-class ExcModImp(Exception):
-    def __init__(me,mname,fname,pos):
-        me.message = "Can not import module [%s] in file \"%s\" pos ln:%d - col:%d" % (mname,fname,pos[0],pos[1])
+class ExcModImp(ExcWHTBase):
+    def __init__(me,mname):
+        me.message = "Can not import module [%s] in %s" % (mname,me.doc_pos())
+
+class ExcImportDepthError(ExcWHTBase):
+    def __init__(me):
+        me.message = "Too many import depth:\n    %s" % ("\n    ".join(ENV["import_deep"]),)
 #}}}
+
+# Build-in plugins{{{
 
 # Opt-plugins decorate
 def decoOptPart(name):
@@ -57,12 +91,12 @@ def decoOptPart(name):
 
 #Plugin: import wh scripts
 @decoOptPart("import")
-def opt_include(param,env):
+def opt_include(param):
     return processfiles(param)
 
 #Plugin: include files
 @decoOptPart("include")
-def opt_include(param,env):
+def opt_include(param):
     def iterfile(fli):
         for f in param:
             if not os.path.isfile(f):
@@ -72,45 +106,46 @@ def opt_include(param,env):
 
 #Plugin: import module
 @decoOptPart("module")
-def opt_maodule(param,env):
+def opt_maodule(param):
     parseMName = re.compile("^[_a-zA-Z][_a-zA-Z0-9]*(\.[_a-zA-Z][_a-zA-Z0-9]*)*$").match
+    loadstr = []
     #Import module list
     def imp_modules(mlist):
         for m in mlist:
             if not parseMName(m):
-                raise ExcModName(m,env["file"],env["pos"])
+                raise ExcModName(m)
             try:
-                mget = __import__(m,None,None,["WHTEntry"])
+                mget = __import__(m,None,None,["wht_entry"])
             except:
-                raise ExcModImp(m,env["file"],env["pos"])
-            if not hasattr(mget,"WHTEntry"):
-                raise ExcModImp(m,env["file"],env["pos"])
-            decoOptPart(m)(mget.WHTEntry)
-        return ""
+                raise ExcModImp(m)
+            if hasattr(mget,"wht_entry"):
+                loadstr.append(mget.wht_entry())
+        return "".join(loadstr)
     return imp_modules(param)
 
 #Plugin: variable set
 @decoOptPart("set")
-def opt_set(param,env):
+def opt_set(param):
     if len(param) != 2 or not param[0]:
-        raise ExcCMDParam(env["file"],env["pos"])
-    if "varb" not in env:
-        env["varb"]={param[0]:param[1]}
+        raise ExcCMDParam()
+    if "varb" not in ENV:
+        ENV["varb"]={param[0]:param[1]}
     else:
-        env["varb"][param[0]]=param[1].decode("utf-8")
+        ENV["varb"][param[0]]=str(param[1])
     return ""
 
 #Plugin: variable get
 @decoOptPart("get")
-def opt_get(param,env):
+def opt_get(param):
     if len(param) != 1 or not param[0]:
-        raise ExcCMDParam(env["file"],env["pos"])
-    if "varb" not in env or param[0] not in env["varb"]:
-        raise ExcCMDVerbFound(env["file"],env["pos"],param[0])
-    return env["varb"][param[0]].encode("utf-8")
+        raise ExcCMDParam()
+    if "varb" not in ENV or param[0] not in ENV["varb"]:
+        raise ExcCMDVerbFound(param[0])
+    return ENV["varb"][param[0]]
 
+#Plugin: output formated datetime
 @decoOptPart("date")
-def opt_date(param,env):
+def opt_date(param):
     persetFmt = {
             "+":"%Y-%m-%d %H:%M:%S %Z",
             "simple":"%Y-%m-%d",
@@ -122,7 +157,17 @@ def opt_date(param,env):
             }
     if len(param) < 1 or param[0] not in persetFmt: fmt = persetFmt["simple"]
     else: fmt = persetFmt[param[0]]
-    return time.strftime(fmt,time.localtime())
+    if len(param) >= 2 and param[1] == "gmt":
+        time_src = time.gmtime
+        fmt = "%%".join(map(lambda a: re.sub("%Z","GMT",a),fmt.split("%%")))
+    else: time_src = time.localtime
+    if type(fmt).__name__ == "unicode":
+        fmt=fmt.encode("utf-8")
+        return time.strftime(fmt,time_src()).decode("utf-8")
+    else:
+        return time.strftime(fmt,time_src())
+
+#}}}
 
 #Import process
 def processfiles(filelist):
@@ -130,7 +175,7 @@ def processfiles(filelist):
     #Scan lines position and make index {{{
     def iterLineLen(lineStr): 
         pos = 0
-        for lnindex in xrange(0,len(lineStr)):
+        for lnindex in range(0,len(lineStr)):
             linelen = len(lineStr[lnindex])
             #( key: (range_start, range_end), value: (line_num, range_start, len) )
             yield ((pos,pos+linelen),(lnindex,pos,linelen))
@@ -153,7 +198,7 @@ def processfiles(filelist):
                 raise ExcFileError(f)
             start = 0
             fdata = open(f,"r").read()
-            fdata = map(lambda instr:instr.strip(),fdata.replace("\r\n","\n").replace("\r","\n").split("\n"))
+            fdata = [instr.strip() for instr in fdata.replace("\r\n","\n").replace("\r","\n").split("\n")]
             schline = scanLine(fdata) # make line-number index
             fdata = "\n".join(fdata)
             pnode = PARSETAG(fdata)
@@ -167,15 +212,23 @@ def processfiles(filelist):
     #Parse opt-plugins
     def iterDoParse():
         for ele in iterfile(filelist):
-            if type(ele) == str:
+            if type(ele).__name__ == "unicode" or type(ele) == str:
                 yield(ele)
             else:
-                ENV["file"] = ele[2]
-                ENV["pos"] = (ele[3][0] + 1, ele[1].start() - ele[3][1] + 1)
+                ENV["docpos"] = DocPosition(ele[2], ele[3][0] + 1, ele[1].start() - ele[3][1] + 1)
                 if ele[0][0] not in OPTLIST:
-                    raise ExcCMDError(ENV["file"],ele[0][0],ENV["pos"])
-                yield OPTLIST[ele[0][0]](ele[0][1:],ENV)
-    return "".join(iterDoParse()).strip()
+                    raise ExcCMDError(ele[0][0])
+                yield OPTLIST[ele[0][0]](ele[0][1:])
+    try:
+        if "import_deep" not in ENV:    #Process import stack
+            ENV["import_deep"] = [",".join(filelist)]
+        else:
+            ENV["import_deep"].append("%s - in %s" % (",".join(filelist),ENV["docpos"]))
+        if len(ENV["import_deep"]) > MAX_IMPORT_DEPTH:
+            raise ExcImportDepthError()
+        return "".join(iterDoParse()).strip() #Begin parse
+    finally:
+        ENV["import_deep"].pop()
 
 def main():
     #Entry
@@ -185,5 +238,5 @@ def main():
     else:
         try:
             print(processfiles(args))
-        except Exception as e:
+        except ExcWHTBase as e:
             print("error - " + e.message, file=sys.stderr)
