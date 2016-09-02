@@ -95,14 +95,20 @@ def opt_include(param):
     return processfiles(param)
 
 #Plugin: include files
-@decoOptPart("include")
-def opt_include(param):
+def create_include():
     def iterfile(fli):
-        for f in param:
+        for f in fli:
             if not os.path.isfile(f):
                 raise ExcFileError(f)
-            yield open(f,"r").read()
-    return "".join(iterfile(param)).strip();
+            yield open(f,"rb").read().decode("utf-8")
+    @decoOptPart("include*")
+    def opt_include_origi(param):
+        return "".join(iterfile(param)).strip()
+    @decoOptPart("include")
+    def opt_include_html(param):
+        return "".join(map(lambda s:"\n".join([line.strip() for line in s.replace("\r\n","\n").replace("\r","\n").split("\n")]), iterfile(param))).strip()
+#Execute create
+create_include()
 
 #Plugin: import module
 @decoOptPart("module")
@@ -197,7 +203,7 @@ def processfiles(filelist):
             if not os.path.isfile(f):
                 raise ExcFileError(f)
             start = 0
-            fdata = open(f,"r").read()
+            fdata = open(f,"rb").read().decode("utf-8")
             fdata = [instr.strip() for instr in fdata.replace("\r\n","\n").replace("\r","\n").split("\n")]
             schline = scanLine(fdata) # make line-number index
             fdata = "\n".join(fdata)
@@ -237,6 +243,10 @@ def main():
         help()
     else:
         try:
-            print(processfiles(args))
+            outbuff = processfiles(args)
+            if type(outbuff).__name__ == "unicode": # for python2
+                sys.stdout.write(outbuff.encode("utf-8"))
+            else: # for python3
+                sys.stdout.write(outbuff)
         except ExcWHTBase as e:
             print("error - " + e.message, file=sys.stderr)
