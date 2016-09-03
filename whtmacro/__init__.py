@@ -244,9 +244,9 @@ def main():
     else:
         try:
             outbuff = processfiles(args)
-            if type(outbuff).__name__ == "unicode":
+            if type(outbuff).__name__ == "unicode": # for python2
                 sys.stdout.write(outbuff.encode("utf-8"))
-            else:
+            else: # for python3
                 sys.stdout.write(outbuff)
         except ExcWHTBase as e:
             print("error - " + e.message, file=sys.stderr)
