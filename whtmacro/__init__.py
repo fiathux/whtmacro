@@ -81,12 +81,20 @@ class ExcImportDepthError(ExcWHTBase):
         me.message = "Too many import depth:\n    %s" % ("\n    ".join(ENV["import_deep"]),)
 #}}}
 
+# Read files iterator
+def iterFile(fli):
+    for f in fli:
+        if not os.path.isfile(f):
+            raise ExcFileError(f)
+        yield open(f,"rb").read().decode("utf-8").replace("\r\n","\n").replace("\r","\n"),f
+
 # Build-in plugins{{{
 
 # Opt-plugins decorate
 def decoOptPart(name):
     def realDeco(func):
         OPTLIST[name] = func
+        return func
     return realDeco
 
 #Plugin: import wh scripts
@@ -96,17 +104,12 @@ def opt_include(param):
 
 #Plugin: include files
 def create_include():
-    def iterfile(fli):
-        for f in fli:
-            if not os.path.isfile(f):
-                raise ExcFileError(f)
-            yield open(f,"rb").read().decode("utf-8")
     @decoOptPart("include*")
     def opt_include_origi(param):
-        return "".join(iterfile(param)).strip()
+        return "".join(map(lambda a:a[0],iterFile(param))).strip()
     @decoOptPart("include")
     def opt_include_html(param):
-        return "".join(map(lambda s:"\n".join([line.strip() for line in s.replace("\r\n","\n").replace("\r","\n").split("\n")]), iterfile(param))).strip()
+        return "".join(map(lambda s:"\n".join([line.strip() for line in s[0].split("\n")]), iterFile(param))).strip()
 #Execute create
 create_include()
 
@@ -177,7 +180,7 @@ def opt_date(param):
 
 #Import process
 def processfiles(filelist):
-    PARSETAG = re.compile("<\((\"([^\"]|[^\\\\]\\\\\")*\"(\s*,\s*(\"([^\"]|[^\\\\]\\\\\")*\"|[0-9]+(.[0-9]+)*))*)\)>").finditer
+    PARSETAG = re.compile("<\((\"((\\\\\\\\|\\\\\")|[^\"])*\"(\s*,\s*(\"((\\\\\\\\|\\\\\")|[^\"])*\"|[0-9]+(.[0-9]+)*))*)\)>").finditer
     #Scan lines position and make index {{{
     def iterLineLen(lineStr): 
         pos = 0
@@ -198,13 +201,10 @@ def processfiles(filelist):
     #}}}
 
     #Parse file element
-    def iterfile(fli):
-        for f in fli:
-            if not os.path.isfile(f):
-                raise ExcFileError(f)
+    def iterFileSlice(fli):
+        for fdataStr,f in iterFile(fli):
+            fdata = fdataStr.split("\n")
             start = 0
-            fdata = open(f,"rb").read().decode("utf-8")
-            fdata = [instr.strip() for instr in fdata.replace("\r\n","\n").replace("\r","\n").split("\n")]
             schline = scanLine(fdata) # make line-number index
             fdata = "\n".join(fdata)
             pnode = PARSETAG(fdata)
@@ -217,7 +217,7 @@ def processfiles(filelist):
             yield fdata[start:]
     #Parse opt-plugins
     def iterDoParse():
-        for ele in iterfile(filelist):
+        for ele in iterFileSlice(filelist):
             if type(ele).__name__ == "unicode" or type(ele) == str: # python2 for "unicode" and python3 for "str"
                 yield(ele)
             else:
@@ -232,7 +232,7 @@ def processfiles(filelist):
             ENV["import_deep"].append("%s - in %s" % (",".join(filelist),ENV["docpos"]))
         if len(ENV["import_deep"]) > MAX_IMPORT_DEPTH:
             raise ExcImportDepthError()
-        return "".join(iterDoParse()).strip() #Begin parse
+        return "\n".join(filter(lambda a:a,map(lambda a:a.strip(), "".join(iterDoParse()).split("\n")))) #Begin parse
     finally:
         ENV["import_deep"].pop()
 
@@ -244,9 +244,9 @@ def main():
     else:
         try:
             outbuff = processfiles(args)
-            if type(outbuff).__name__ == "unicode": # for python2
+            if type(outbuff).__name__ == "unicode":
                 sys.stdout.write(outbuff.encode("utf-8"))
-            else: # for python3
+            else:
                 sys.stdout.write(outbuff)
         except ExcWHTBase as e:
             print("error - " + e.message, file=sys.stderr)
