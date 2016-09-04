@@ -11,8 +11,9 @@ Default syntax elements
     symbol      : operator-symbol
     comment     : comment string
     type        : data type
-    value       : number value
-    string      : string
+    func        : build in function
+    value       : single value
+    string      : sequence value
     dsl         : domain specified language
     nosynt      : no syntax hi-light
 '''
@@ -29,7 +30,8 @@ class SyntElem(object):
         return me.shiftHTML(me.data)
     @staticmethod
     def shiftHTML(conv):
-        return conv.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;").replace(" ","&nbsp;").replace("\n","<br />")
+        return conv.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;"
+                ).replace(" ","&nbsp;").replace("\n","<br />")
 # Base: no syntax block
 class SyntElemNosynt(SyntElem):pass
 # Base: key word block
@@ -48,6 +50,10 @@ class SyntElemComment(SyntElem):
 class SyntElemType(SyntElem):
     def __str__(me):
         return "".join(("<span class=\"synt-typ\">",me.shiftHTML(me.data),"</span>"))
+# Base: build-in function block
+class SyntElemFunc(SyntElem):
+    def __str__(me):
+        return "".join(("<span class=\"synt-fnc\">",me.shiftHTML(me.data),"</span>"))
 # Base: value block
 class SyntElemValue(SyntElem):
     def __str__(me):
@@ -70,37 +76,49 @@ class SyntTree(SyntElem):
     def __str__(me):
         return "".join(map(lambda a:"%s" % a, me.data))
 
+# Syntax rule parse
+class SyntRule(object):
+    def __init__(me,rulelist=None,default=SyntElemNosynt):
+        me._allrule = [(re.compile(i[0]),i[1]) for i in rulelist] if rulelist else None
+        me._defaultElement = default
+    # generate parser-iterator of rule
+    def __call__(me,prevObj):
+        def iterSearching(substr): # Search element parse
+            next_parser = me._allrule
+            while True:
+                if not substr: break
+                all_result = [i for i in filter(
+                            lambda b: b[0], map(
+                                lambda a: (a[0].search(substr),a[0],a[1]), next_parser))]
+                if not all_result: break
+                next_parser = [(i[1],i[2]) for i in all_result]
+                all_result.sort(key=lambda x: x[0].start())
+                choose,parser,elemtype = all_result[0]
+                if choose.start() > 0: yield substr[0:choose.start()]
+                yield elemtype(choose.group(0))
+                substr = substr[choose.end():]
+            if substr: yield substr
+        def iterLang(langObj): # Iterate element tree
+            for obj in langObj:
+                if not obj: continue
+                if isinstance(obj,SyntElem):
+                    yield obj
+                elif not me._allrule:
+                    yield me._defaultElement(obj)
+                else:
+                    for sp in iterSearching(obj): yield sp
+        return iterLang(prevObj)
+
 # Base: regular parse syntax
 class SyntTreeParser(SyntTree):
-    '''
-    Define your parse regular in the list that named "RANG".
-    Item of "RANG" format like this:
-    [
-        (regular expression,element type base as SyntElem),
-        ...
-    ]
-    '''
-    RANG = []
+    # Define your rule in a list named "RULE". the rule must be type of "SyntRule"
+    RULE = []
     # Create parse iterator
     def parseTree(me,langStr):
-        def iterElement(inIter,parse,elemType):
-            for its in inIter:
-                if isinstance(its,SyntElem):
-                    yield its
-                elif not parse:
-                    if (its):
-                        yield elemType(its)
-                else:
-                    start = 0
-                    for parseElem in parse.finditer(its):
-                        yield its[start:parseElem.start()]
-                        yield elemType(parseElem.group(0))
-                        start = parseElem.end()
-                    yield its[start:]
         iterObj = [langStr]
-        for p,elem in me.RANG:
-            iterObj = iterElement(iterObj,re.compile(p),elem)
-        return iterElement(iterObj,None,SyntElemNosynt)
+        for p in me.RULE:
+            iterObj = p(iterObj)
+        return SyntRule()(iterObj)
 
 # Prepare HTML text
 class SyntTreePreHTML(SyntTree):
