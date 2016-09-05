@@ -51,7 +51,7 @@ print("((?<=[^a-zA-Z0-9_\.])|^)(%s)($|(?=[^a-zA-Z0-9_\.]))" % "|".join(a))
 class SyntTreeGolang(syntaxengine.SyntTreeParser):
     RULE = [
             syntaxengine.SyntRule([
-                ("/\\*.*?\\*/", syntaxengine.SyntElemComment),
+                ("/\\*(.|\s)*?\\*/", syntaxengine.SyntElemComment),
                 ("//.*?(?=\n)", syntaxengine.SyntElemComment),
                 ("\"((\\\\\\\\|\\\\\")|[^\"])*\"", syntaxengine.SyntElemStr),
                 ("'((\\\\\\\\|\\\\')|[^'])*'", syntaxengine.SyntElemStr)
