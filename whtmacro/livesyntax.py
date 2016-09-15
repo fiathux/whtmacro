@@ -125,4 +125,4 @@ def synt_golang(langStr):
 # python syntax
 @syntaxengine.decoRegSyntax("javascript")
 def synt_golang(langStr):
-    return "".join(("<pre class=\"lang-py\">","%s" % SyntTreeJS(langStr),"</pre>"))
+    return "".join(("<pre class=\"lang-js\">","%s" % SyntTreeJS(langStr),"</pre>"))
