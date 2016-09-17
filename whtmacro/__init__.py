@@ -125,7 +125,7 @@ def opt_maodule(param):
                 raise ExcModName(m)
             try:
                 mget = __import__(m,None,None,["wht_entry"])
-            except:
+            except ExcWHTBase:
                 raise ExcModImp(m)
             if hasattr(mget,"wht_entry"):
                 loadstr.append(mget.wht_entry())

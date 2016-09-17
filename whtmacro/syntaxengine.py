@@ -113,6 +113,19 @@ class SyntRule(object):
 class SyntTreeParser(SyntTree):
     # Define your rule in a list named "RULE". the rule must be type of "SyntRule"
     RULE = []
+    def __init__(me,langStr):
+        def ruleFix(r): # Simple rule(tuple or list convert to "SyntRule")
+            if type(r) is tuple:
+                return SyntRule([r])
+            elif type(r) is list:
+                return SyntRule(r)
+            else:
+                return r
+        me.init()
+        me.RULE = map(ruleFix,me.RULE)
+        super(SyntTreeParser,me).__init__(langStr)
+    # Custom initialize
+    def init(me): pass
     # Create parse iterator
     def parseTree(me,langStr):
         iterObj = [langStr]

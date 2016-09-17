@@ -1,0 +1,37 @@
+there are all operator list from offecial document. I convert it to regular expression with
+following codes:
+-----------------------
+a = [
+        "+","&","+=","&=","&&","==","!=","(",")","-","|","-=","|=","||","<","<=",
+        "[","]","*","^","*=","^=","<-",">",">=","{","}","/","<<","/=","<<=","++",
+        "=",":=",",",";","%",">>","%=",">>=","--","!","...",".",":","&^","&^="
+        ]
+a = ["lambda","or","and","not","in","not in","is","is not","|","^","&","<<",">>","+","-","*","/","//","%","~","**",":"]
+a.sort(key=lambda c:len(c),reverse=True)
+def spconv(s):
+    sp = ["\\",".","^","$","*","+","?","{","}","[","]","(",")","|"]
+    for psp in sp:
+        s = s.replace(psp,"\\"+psp)
+    return s
+
+b = map(lambda y:y.replace("\\","\\\\").replace(" "," +"), map(lambda x: spconv(x) , a))
+print("(%s)" % "|".join(b))
+=======================
+
+Key word generate with following codes:
+-----------------------
+a = [
+        "break","default","func","interface","select","case","defer","go","map","struct",
+        "chan","else","goto","package","switch","const","fallthrough","if",
+        "range","type","continue","for","import","return","var"
+        ]
+print("((?<=[^a-zA-Z0-9_\.])|^)(%s)($|(?=[^a-zA-Z0-9_\.]))" % "|".join(a))
+=======================
+
+Type generate with following codes:
+-----------------------
+a = [
+        "int","uint","int8","int16","int32","int64","uint8","uint16","uint32","uint64",
+        "rune","float32","float64","complex64","complex128","byte","string","boolean"
+        ]
+print("((?<=[^a-zA-Z0-9_\.])|^)(%s)($|(?=[^a-zA-Z0-9_\.]))" % "|".join(a))
