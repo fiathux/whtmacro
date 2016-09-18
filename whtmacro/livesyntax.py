@@ -3,17 +3,18 @@
 from __future__ import unicode_literals
 
 import re
-from whtmacro import syntaxengine
+from whtmacro import syntaxengine as syngine
 
 # RegExp template {{{
 
+def regexShift(s):
+    regex_symb = ["\\",".","^","$","*","+","?","{","}","[","]","(",")","|"]
+    for rs in regex_symb:
+        s = s.replace(rs,"\\"+rs)
+    return s
+
 # General rule template
 def mkruleTempGeneral(first_parse=""):
-    def regexShift(s):
-        regex_symb = ["\\",".","^","$","*","+","?","{","}","[","]","(",")","|"]
-        for rs in regex_symb:
-            s = s.replace(rs,"\\"+rs)
-        return s
     def curryLayer1(last_parse=""):
         def curryLayer2(head_parse=""):
             def curryLayer3(tail_parse=""):
@@ -28,7 +29,7 @@ def mkruleTempGeneral(first_parse=""):
                         if addit["pre_rule"]: wordexpr = addit["pre_rule"] + "|" + wordexpr
                         if addit["flow_rule"]: wordexpr = wordexpr + "|" + addit["flow_rule"]
                         return "".join([ # Combine regexp
-                            head_parse, first_parse, "(", wordexpr, ")", last_parse, tail_parse
+                            first_parse, head_parse, "(", wordexpr, ")", tail_parse, last_parse
                             ]),element
                     return curryFinal
                 return curryLayer4
@@ -36,44 +37,129 @@ def mkruleTempGeneral(first_parse=""):
         return curryLayer2
     return curryLayer1
 
-# Word templates
+# Word template partital functions
 mkrulePartLeftWord = mkruleTempGeneral("((?<=[^a-zA-Z0-9_\.])|^)")("(?=[^a-zA-Z0-9_\.])")
 mkrulePartRightWord = mkruleTempGeneral("(?<=[^a-zA-Z0-9_\.])")("($|(?=[^a-zA-Z0-9_\.]))")
 mkrulePartUniqueWord = mkruleTempGeneral("((?<=[^a-zA-Z0-9_\.])|^)")("($|(?=[^a-zA-Z0-9_\.]))")
-# Expression templates
+mkrulePartClassWord = mkruleTempGeneral("((?<=[^a-zA-Z0-9_\.])|^)")("($|(?=[^a-zA-Z0-9_]))")
+# Expression template partital functions
 mkrulePartLeftExp = mkruleTempGeneral("((?<=[^a-zA-Z0-9_])|^)")("(?=[^a-zA-Z0-9_\.])")
 mkrulePartRightExp = mkruleTempGeneral("(?<=[^a-zA-Z0-9_\.])")("($|(?=[^a-zA-Z0-9_]))")
 mkrulePartGeneralExp = mkruleTempGeneral("((?<=[^a-zA-Z0-9_])|^)")("($|(?=[^a-zA-Z0-9_]))")
-mkruleTempGeneral("((?<=[^a-zA-Z0-9_])|^)")("($|(?=[^a-zA-Z0-9_]))")
+mkrulePartUniqueExp = mkruleTempGeneral("(?<=[^a-zA-Z0-9_\.])")("(?=[^a-zA-Z0-9_\.])")
 
 # General element rule
-mkruleKeyword = mkrulePartUniqueWord()()(syntaxengine.SyntElemKeyWord)
-mkruleSimpType = mkrulePartUniqueWord()()(syntaxengine.SyntElemType)
-mkruleClassType = mkrulePartLeftExp()()(syntaxengine.SyntElemType)
+mkruleKeyword = mkrulePartUniqueWord()()(syngine.SyntElemKeyWord)
+mkruleSimpType = mkrulePartUniqueWord()()(syngine.SyntElemType)
+mkruleClassType = mkrulePartClassWord()()(syngine.SyntElemType)
 mkruleFunc = mkruleTempGeneral(
-        "((?<=[^a-zA-Z0-9_\.])|^)")("(?=\\s*\()")()()(syntaxengine.SyntElemFunc)
-mkruleSymbol = mkruleTempGeneral()()()()(syntaxengine.SyntElemSymbol)
+        "((?<=[^a-zA-Z0-9_\.])|^)")("(?=\\s*\()")()()(syngine.SyntElemFunc)
+mkruleSymbol = mkruleTempGeneral()()()()(syngine.SyntElemSymbol)
 
 # }}}
 
 # C syntax tree {{{
-class SyntTreeC(syntaxengine.SyntTreeParser):
-    CSTY_COMMENT = ("/\\*(.|\\s)*?\\*/", syntaxengine.SyntElemComment)
-    CSTY_COMMENT_LINE = ("//.*?(?=\\n)", syntaxengine.SyntElemComment)
-    CSTY_STR = ("\"((\\\\\\\\|\\\\\")|[^\"])*\"", syntaxengine.SyntElemStr)
-    CSTY_CHAR = ("'((\\\\\\\\|\\\\')|[^'])*'", syntaxengine.SyntElemStr)
+# support
+class SyntCCommon(object):
+    CSTY_COMMENT = ("/\\*(.|\\s)*?\\*/", syngine.SyntElemComment)
+    CSTY_COMMENT_LINE = ("//.*?((?=\\n)|$)", syngine.SyntElemComment)
+    CSTY_STR = ("\"((\\\\\\\\|\\\\\")|[^\"])*\"", syngine.SyntElemStr)
+    CSTY_CHAR = ("'((\\\\\\\\|\\\\')|[^'])*'", syngine.SyntElemStr)
+    C_NUM = (
+            "[0-9]+((\\.[0-9]*)?([eE][\+-]?[0-9]+)?)", # integer or float
+            "\\.[0-9]+([eE][\+-]?[0-9]+)?", # simple float
+            "0x[0-9a-fA-F]+"    # hex
+            )
+    C_SPECVAL = ("true", "false", "NULL")
+    CSTY_NUM = mkrulePartUniqueWord()()(syngine.SyntElemValue)(*C_NUM, re_shift=False)
+    CSTY_SPECVAL = mkrulePartUniqueWord()()(syngine.SyntElemValue)(*C_SPECVAL)
+# Tree
+class SyntTreeC(syngine.SyntTreeParser):
+    # Pre-process DSL {{{
+    # Macro area
+    class SyntTreeCMacro(syngine.SyntTreeParser):
+        RULE = [
+                ("^\\s+",syngine.SyntElem),
+                ("^#[a-zA-Z]+",syngine.SyntElemKeyWord),
+                [
+                    SyntCCommon.CSTY_COMMENT,
+                    SyntCCommon.CSTY_COMMENT_LINE,
+                    SyntCCommon.CSTY_STR,
+                    SyntCCommon.CSTY_CHAR
+                ],
+                SyntCCommon.CSTY_NUM,
+                SyntCCommon.CSTY_SPECVAL
+            ]
+        def __str__(me):
+            return "".join((
+                "<span class=\"",syngine.SYNSTY["dsl"],"\">",
+                super(SyntTreeC.SyntTreeCMacro,me).__str__(),
+                "</span>"
+                ))
+    # Include area
+    class SyntTreeCInclude(syngine.SyntTreeParser):
+        RULE = [
+                ("^\\s+",syngine.SyntElem),
+                ("^#include",syngine.SyntElemKeyWord),
+                [
+                    SyntCCommon.CSTY_COMMENT,
+                    SyntCCommon.CSTY_COMMENT_LINE,
+                    ("(<[^\>]*>|\"((\\\\\\\\|\\\\\")|[^\"])*\")",syngine.SyntElemStr)
+                ]
+            ]
+    #}}}
+    # Word and element
+    C_PREPROC = (
+            "define", "undef", "if", "ifdef", "ifndef", "else", "endif", "error",
+            "warning", "pragma"
+            )
+    
+    C_TYPE = (
+            "char", "short", "int", "unsigned", "long", "float", "double", "struct",
+            "union", "void", "enum", "signed", "_Bool", "_Complex", "_Imaginary",
+            "bool", "complex", "imaginary", "_Thread_local", "_Noreturn", "static",
+            "extern", "inline", "restrict", "const", "volatile", "auto", "register",
+            "_Atomic", "_Alignas"
+            )
+    C_KW = (
+            "typedef", "break", "case", "continue", "default", "do", "else", "for",
+            "goto", "if", "return", "switch", "while", "_Generic", "_Static_assert",
+            "sizeof", "_Alignof", "alignof"
+            )
+    C_SYMBOL = (
+            ".","->","++","--","+=","-=","*=","/=","%=","&=","|=","^=","<<=",">>=",
+            "+","-","*","/","%","==","!=","<<",">>","<=",">=","<",">","=","?",":",
+            "!","&&","||","~","&","|","^","(",")","[","]",",","{","}"
+            )
+    # pre-build
+    CStyMacroTemp = lambda pre_rule: mkruleTempGeneral(pre_rule)(
+            "(( |\\t)+([^\\n]|\\\\\\n|/\\*(.|\\s)*?\\*/)+|(\s*)((?=\\n)|(?=/\\*)|(?=//)))")()()
+    CStyMacroGen = CStyMacroTemp("(?<=\\n)( |\\t)*#") # General parser
+    CStyMacroOnce = CStyMacroTemp("^( |\\t)*#") # First parser
+    # Rule
     RULE = [
             [
-                CSTY_COMMENT,
-                CSTY_COMMENT_LINE,
-                CSTY_STR,
-                CSTY_CHAR
+                CStyMacroOnce(SyntTreeCInclude)("include"),
+                CStyMacroOnce(SyntTreeCMacro)(*C_PREPROC)
             ],
+            [
+                SyntCCommon.CSTY_COMMENT,
+                SyntCCommon.CSTY_COMMENT_LINE,
+                SyntCCommon.CSTY_STR,
+                SyntCCommon.CSTY_CHAR,
+                CStyMacroGen(SyntTreeCInclude)("include"),
+                CStyMacroGen(SyntTreeCMacro)(*C_PREPROC)
+            ],
+            SyntCCommon.CSTY_NUM,
+            SyntCCommon.CSTY_SPECVAL,
+            mkruleSimpType(*C_TYPE),
+            mkruleKeyword(*C_KW),
+            mkruleSymbol(*C_SYMBOL)
         ]
 #}}}
 
 # Golang syntax tree {{{
-class SyntTreeGolang(syntaxengine.SyntTreeParser):
+class SyntTreeGolang(syngine.SyntTreeParser):
     GOLANG_NUM = (
             "[0-9]+((\.[0-9]*)?([eE][\+-]?[0-9]+)?i?)", # integer or normal float with complex
             "\.[0-9]+([eE][\+-]?[0-9]+)?i?", # simple float with complex
@@ -98,16 +184,16 @@ class SyntTreeGolang(syntaxengine.SyntTreeParser):
             "uint32", "uint64", "rune", "float32", "float64", "complex64",
             "complex128", "byte", "string", "bool"
             )
-    GOStyleType = mkrulePartRightWord()()(syntaxengine.SyntElemType)
+    GOStyleType = mkrulePartRightWord()()(syngine.SyntElemType)
     RULE = [
             [
-                SyntTreeC.CSTY_COMMENT,
-                SyntTreeC.CSTY_COMMENT_LINE,
-                SyntTreeC.CSTY_STR,
-                SyntTreeC.CSTY_CHAR
+                SyntCCommon.CSTY_COMMENT,
+                SyntCCommon.CSTY_COMMENT_LINE,
+                SyntCCommon.CSTY_STR,
+                SyntCCommon.CSTY_CHAR
             ],
-            mkrulePartUniqueWord()()(syntaxengine.SyntElemValue)(*GOLANG_NUM,re_shift=False),
-            mkrulePartUniqueWord()()(syntaxengine.SyntElemValue)(*GOLANG_SPECVAL),
+            mkrulePartUniqueWord()()(syngine.SyntElemValue)(*GOLANG_NUM,re_shift=False),
+            mkrulePartUniqueWord()()(syngine.SyntElemValue)(*GOLANG_SPECVAL),
             mkruleSymbol(*GOLANG_SYMBOL),
             mkruleKeyword(*GOLANG_KW),
             GOStyleType(*GOLANG_TYPE)
@@ -115,68 +201,187 @@ class SyntTreeGolang(syntaxengine.SyntTreeParser):
 #}}}
 
 # Python syntax tree {{{
-class SyntTreePython(syntaxengine.SyntTreeParser):
+class SyntTreePython(syngine.SyntTreeParser):
+    # Range rule
+    PYSTY_STR_DQ = ("[rbu]?\"((\\\\\\\\|\\\\\")|[^\"])*\"", syngine.SyntElemStr)
+    PYSTY_STR_SQ = ("[rbu]?'((\\\\\\\\|\\\\')|[^'])*'", syngine.SyntElemStr)
+    PYSTY_STR_DQML = (
+            "[rbu]?\"{3}(\"{1,2}[^\"])?((\\\\\\\\|\\\\\"|[^\"]\"{1,2}[^\"])|[^\"])*\"{3}",
+            syngine.SyntElemStr
+            )
+    PYSTY_STR_SQML = (
+            "[rbu]?'{3}('{1,2}[^'])?((\\\\\\\\|\\\\'|[^']'{1,2}[^'])|[^'])*'{3}",
+            syngine.SyntElemStr
+            )
+    PYSTY_COMMENT = ("#.*?(?=\\n)", syngine.SyntElemComment)
+    # Word and element
+    PYTH_NUM = (
+            "[0-9]+((\\.[0-9]*)?([eE][\+-]?[0-9]+)?j?)",  # integer or normal float with complex
+            "\\.[0-9]+([eE][\+-]?[0-9]+)?j?", # simple float with complex
+            "0x[0-9a-fA-F]+" # hex integer
+            )
+    PYTH_SPECVAL = ("True", "False", "None")
+    PYTH_SYMBOL_REG = ("lambda","not +in","is +not","and","not","or","in","is")
+    PYTH_SYMBOL = (
+            "==", "!=", "<<", ">>", ">", "<", ">=", "<=", "=", ",", "(", ")",
+            "[", "]", "{", "}", "//", "**", "|", "^", "&", "+", "-", "*", "/",
+            "%", "~", ":", "."
+            )
+    PYTH_FUNC_SEPC = (
+            "new", "init", "del", "repr", "str", "lt", "le", "eq", "ne", "gt",
+            "ge", "cmp", "rcmp", "hash", "nonzero", "unicode", "getattr", "setattr",
+            "delattr", "getattribute", "get", "set", "delete", "metaclass",
+            "instancecheck", "subclasscheck", "call", "len", "getitem", "missing",
+            "setitem", "delitem", "iter", "reversed", "contains", "getslice",
+            "setslice", "delslice", "add", "sub", "mul", "floordiv", "mod", "divmod",
+            "pow", "lshift", "rshift", "and", "xor", "or", "div", "truediv", "radd",
+            "rsub", "rmul", "rdiv", "rtruediv", "rfloordiv", "rmod", "rdivmod",
+            "rpow", "rlshift", "rrshift", "rand", "rxor", "ror", "iadd", "isub",
+            "imul", "idiv", "itruediv", "ifloordiv", "imod", "ipow", "ilshift",
+            "irshift", "iand", "ixor", "ior", "neg", "pos", "abs", "invert", "complex",
+            "int", "long", "float", "oct", "hex", "index", "coerce", "enter", "exit"
+            )
+    PYTH_FUNC = (
+            "divmod", "globals", "print", "repr", "delattr", "basestring", "hash",
+            "dir", "all", "map", "eval", "compile", "hex", "setattr", "abs", "max",
+            "ord", "next", "help", "execfile", "any", "reversed", "reduce", "super",
+            "sum", "sorted", "vars", "slice", "iter", "input", "reload", "round",
+            "raw_input", "id", "callable", "oct", "ascii", "staticmethod",
+            "isinstance", "cmp", "file", "issubclass", "locals", "min", "pow",
+            "getattr", "hasattr", "chr", "__import__", "classmethod", "unichr",
+            "bool", "open", "filter", "len", "format", "object", "bin", "exec",
+            "type", "enumerate", "property", "zip"
+            )
+    PYTH_KW = (
+            "del", "from", "while", "as", "elif", "global", "with", "assert", "else",
+            "if", "pass", "yield", "break", "except", "import", "print", "class",
+            "exec", "in", "raise", "continue", "finally", "return", "def", "for",
+            "try", "__all__", "__slots__"
+            )
+    PYTH_TYPE = (
+            "int", "long", "complex", "float", "str", "unicode", "bytes", "bytearray",
+            "memoryview", "tuple", "list", "set", "frozenset", "dict", "range",
+            "xrange"
+            )
+    # Pre-bulid
+    PYTH_SYB_REGC = "(" + mkrulePartUniqueExp()()(None)(*PYTH_SYMBOL_REG, re_shift=False)[0] + ")"
+    PyStySpecFunc = mkruleTempGeneral("(?<=\\s|\\.)")("(?=\\s*\()")("__")("__")
+    # Rule
     RULE = [
             [
-                ("[rbu]?\"{3}(\"{1,2}[^\"])?((\\\\\\\\|\\\\\"|[^\"]\"{1,2}[^\"])|[^\"])*\"{3}", syntaxengine.SyntElemStr),
-                ("[rbu]?'{3}('{1,2}[^'])?((\\\\\\\\|\\\\'|[^']'{1,2}[^'])|[^'])*'{3}", syntaxengine.SyntElemStr),
-                ("#.*?(?=\\n)", syntaxengine.SyntElemComment),
-                ("[rbu]?\"((\\\\\\\\|\\\\\")|[^\"])*\"", syntaxengine.SyntElemStr),
-                ("[rbu]?'((\\\\\\\\|\\\\')|[^'])*'", syntaxengine.SyntElemStr)
+                PYSTY_STR_DQML,
+                PYSTY_STR_SQML,
+                PYSTY_COMMENT,
+                PYSTY_STR_DQ,
+                PYSTY_STR_SQ
             ],
-            ("(?<=[^a-zA-Z0-9_\\.])([0-9]+((\\.[0-9]*)?([eE][\+-]?[0-9]+)?j?)|\\.[0-9]+([eE][\+-]?[0-9]+)?j?|0x[0-9a-fA-F]+)($|(?=[^a-zA-Z0-9_\\.]))", syntaxengine.SyntElemValue),
-            ("(?<=[^a-zA-Z0-9_\\.])True|False|None($|(?=[^a-zA-Z0-9_\\.]))", syntaxengine.SyntElemValue),
-            ("(((?<=[^a-zA-Z0-9_\\.])(lambda|not +in|is +not|and|not|or|in|is)(?=[^a-zA-Z0-9_\\.]))|==|!=|>|<|>=|<=|=|,|\\(|\\)|\\[|\\]|\\{|\\}|<<|>>|//|\\*\\*|\\||\\^|&|\\+|-|\\*|/|%|~|:)", syntaxengine.SyntElemSymbol),
-            ("(?<=\\s|\\.)__(new|init|del|repr|str|lt|le|eq|ne|gt|ge|cmp|rcmp|hash|nonzero|unicode|getattr|setattr|delattr|getattribute|get|set|delete|slots|metaclass|instancecheck|subclasscheck|call|len|getitem|missing|setitem|delitem|iter|reversed|contains|getslice|setslice|delslice|add|sub|mul|floordiv|mod|divmod|pow|lshift|rshift|and|xor|or|div|truediv|radd|rsub|rmul|rdiv|rtruediv|rfloordiv|rmod|rdivmod|rpow|rlshift|rrshift|rand|rxor|ror|iadd|isub|imul|idiv|itruediv|ifloordiv|imod|ipow|ilshift|irshift|iand|ixor|ior|neg|pos|abs|invert|complex|int|long|float|oct|hex|index|coerce|enter|exit)__((?=[^a-zA-Z0-9_\\.])|$)", syntaxengine.SyntElemFunc),
-            ("((?<=[^a-zA-Z0-9_\\.])|^)(divmod|globals|print|repr|delattr|basestring|hash|dir|all|map|eval|compile|hex|setattr|abs|max|ord|next|help|execfile|any|reversed|reduce|super|sum|sorted|vars|slice|iter|input|reload|round|raw_input|id|callable|oct|ascii|staticmethod|isinstance|cmp|file|issubclass|locals|min|pow|getattr|hasattr|chr|__import__|classmethod|unichr|bool|open|filter|len|format|object|bin|exec|type|enumerate|property|zip)(?=\\s*\()", syntaxengine.SyntElemFunc),
-            ("((?<=[^a-zA-Z0-9_\\.])|^)(del|from|while|as|elif|global|with|assert|else|if|pass|yield|break|except|import|print|class|exec|in|raise|continue|finally|return|def|for|try|__all__)($|(?=[^a-zA-Z0-9_\\.]))", syntaxengine.SyntElemKeyWord),
-            ("((?<=[^a-zA-Z0-9_\\.])|^)(int|long|complex|float|str|unicode|bytes|bytearray|memoryview|tuple|list|set|frozenset|dict|range|xrange)($|(?=[^a-zA-Z0-9_\\.]))", syntaxengine.SyntElemType)
+            mkrulePartUniqueWord()()(syngine.SyntElemValue)(*PYTH_NUM,re_shift=False),
+            mkrulePartUniqueWord()()(syngine.SyntElemValue)(*PYTH_SPECVAL),
+            PyStySpecFunc(syngine.SyntElemFunc)(*PYTH_FUNC_SEPC),
+            mkruleFunc(*PYTH_FUNC),
+            mkruleClassType(*PYTH_TYPE),
+            mkruleTempGeneral()()()()(syngine.SyntElemSymbol)(
+                *PYTH_SYMBOL, pre_rule=PYTH_SYB_REGC),
+            mkruleKeyword(*PYTH_KW)
         ]
 # }}}
 
 # Javascript syntax tree {{{
-class SyntTreeJS(syntaxengine.SyntTreeParser):
-    class SyntTreeJSImport(syntaxengine.SyntTreeParser):
+class SyntTreeJS(syngine.SyntTreeParser):
+    # Import sub-statment
+    class SyntTreeJSImport(syngine.SyntTreeParser):
         RULE = [
                 [
-                    ("/\\*(.|\\s)*?\\*/", syntaxengine.SyntElemComment),
-                    ("//.*?(?=\\n)", syntaxengine.SyntElemComment),
-                    ("\"((\\\\\\\\|\\\\\")|[^\"])*\"", syntaxengine.SyntElemStr),
-                    ("'((\\\\\\\\|\\\\')|[^'])*'", syntaxengine.SyntElemStr)
+                    SyntCCommon.CSTY_COMMENT,
+                    SyntCCommon.CSTY_COMMENT_LINE,
+                    SyntCCommon.CSTY_STR,
+                    SyntCCommon.CSTY_CHAR
                 ],
-                ("(\\{|\\}|\\*|,|;)", syntaxengine.SyntElemSymbol),
-                ("((?<=[^a-zA-Z0-9_\\.])|^)(import|as|from)($|(?=[^a-zA-Z0-9_\\.]))", syntaxengine.SyntElemKeyWord)
-                ]
+                mkruleSymbol("{", "}", "*", ",", ";"),
+                mkruleKeyword("import", "as", "from")
+            ]
+    # Range rule
+    JSSTY_REGEXP = ("/((\\\\\\\\|\\\\/)|[^/])*/", syngine.SyntElemDSL)
+    JSSTY_IMPORT = (
+            "".join(("(^|(?<=[^a-zA-Z0-9_\\\\.]))",
+            "(import(?=\\s|\\*|\\{|\"|\'))",
+            "(", "|".join((
+                "[^'\"/]", # general content (no string & no comment)
+                "/[^*'\"/]", # case general content follow "/"
+                "(/\\*(.|\\s)*?\\*/", # comment range
+                "\"((\\\\\\\\|\\\\\")|[^\"])*\"", # double-quote string
+                "'((\\\\\\\\|\\\\')|[^'])*'", # single-quote string
+                "//.*?(?=\\n))" # comment line
+                )),
+            ")",
+            "*?(;|\\n)")), SyntTreeJSImport)
+    # Word and element
+    JS_NUM = SyntCCommon.C_NUM
+    JS_SPECVAL = ("true", "true", "null", "NaN", "Infinity")
+    JS_KW_NEW = ("function\\s*\\*", "yield\\s*\\*")
+    JS_KW = (
+            "=>", "var", "let", "const", "function", "yield", "for", "if", "else",
+            "return", "switch", "case", "throw", "try", "cache", "finally", "while",
+            "with", "new", "delete", "class", "get", "set"
+            )
+    JS_KW_EXP = ("this", "super")
+    JS_SYMBOL_REG = ("in", "of", "instanceof", "typeof")
+    JS_SYMBOL = (
+            "{", "}", "[", "]", "(", ")", "++", "+", "--", "-", "**", "*", "/", "%",
+            ">>>", ">>", "<<", ">", "<", ">=", "<=", "!==", "!=", "===", "==", "=",
+            "||", "&&", "!", "&", "|", "~", "^", "?", ":", ",", ".", ";"
+            )
+    JS_FUNC = (
+            "decodeURI", "encodeURI", "decodeURIComponent", "encodeURIComponent",
+            "escape", "eval", "isFinite", "isNaN", "parseFloat", "parseInt",
+            "unescape", "uneval"
+            )
+    JS_TYPE = (
+            "Number", "String", "Boolean", "Symbol", "Object", "null", "undefined",
+            "Function", "Array", "ArrayBuffer", "Date", "Error", "RegExp", "Promise",
+            "Generator", "JSON"
+            )
+    # Pre-bulid
+    JS_SYB_REGC = "(" + mkrulePartUniqueExp()()(None)(*JS_SYMBOL_REG)[0] + ")"
+    JS_KW_NEWC = "|".join(JS_KW_NEW)
+    JSStyleClassKeyword = mkrulePartClassWord()()(syngine.SyntElemKeyWord)
+    # Rule
     RULE = [
             [
-                ("/\\*(.|\\s)*?\\*/", syntaxengine.SyntElemComment),
-                ("//.*?(?=\\n)", syntaxengine.SyntElemComment),
-                ("\"((\\\\\\\\|\\\\\")|[^\"])*\"", syntaxengine.SyntElemStr),
-                ("'((\\\\\\\\|\\\\')|[^'])*'", syntaxengine.SyntElemStr),
-                ("/((\\\\\\\\|\\\\/)|[^/])*/", syntaxengine.SyntElemDSL),
-                ("(^|(?<=[^a-zA-Z0-9_\\\\.]))(import(?=\\s|\\*|\\{|\"|\'))([^'\"/]|/[^*'\"]|(/\\*(.|\\s)*?\\*/|\"((\\\\\\\\|\\\\\")|[^\"])*\"|'((\\\\\\\\|\\\\')|[^'])*'|//.*?(?=\\n)))*?(;|\\n)",SyntTreeJSImport)
+                SyntCCommon.CSTY_COMMENT,
+                SyntCCommon.CSTY_COMMENT_LINE,
+                SyntCCommon.CSTY_STR,
+                SyntCCommon.CSTY_CHAR,
+                JSSTY_REGEXP,
+                JSSTY_IMPORT
             ],
-            ("(?<=[^a-zA-Z0-9_\\.])([0-9]+((\\.[0-9]*)?([eE][\+-]?[0-9]+)?)|\\.[0-9]+([eE][\+-]?[0-9]+)?|0x[0-9a-fA-F]+)($|(?=[^a-zA-Z0-9_\\.]))", syntaxengine.SyntElemValue),
-            ("(?<=[^a-zA-Z0-9_\\.])true|true|null|NaN|Infinity($|(?=[^a-zA-Z0-9_\\.]))", syntaxengine.SyntElemValue),
-            ("((?<=[^a-zA-Z0-9_\\.])|^)(var|let|const|function\\s*\\*|function|=>|yield\\s*\\*|yield|for|if|else|return|switch|case|throw|try|cache|finally|while|with|new|delete|class|get|set)($|(?=[^a-zA-Z0-9_\\.]))", syntaxengine.SyntElemKeyWord),
-            ("(((?<=[^a-zA-Z0-9_\\.])(in|of|instanceof|typeof)(?=[^a-zA-Z0-9_\\.]))|\\{|\\}|\\[|\\]|\\(|\\)|\\+\\+|\\+|--|-|\\*\\*|\\*|/|%|>>>|>>|<<|>|<|>=|<=|!==|!=|===|==|=|\\|\\||&&|!|&|\\||~|\\^|\\?|:|,|\\.|;)", syntaxengine.SyntElemSymbol),
-            ("((?<=[^a-zA-Z0-9_\\.])|^)(Number|String|Boolean|Symbol|Object|null|undefined|Function|Array|ArrayBuffer|Date|Error|RegExp|Promise|Generator|JSON)($|(?=[^a-zA-Z0-9_\\.]))", syntaxengine.SyntElemType),
-            ("((?<=[^a-zA-Z0-9_\\.])|^)(this|super)($|(?=[^a-zA-Z0-9_]))", syntaxengine.SyntElemKeyWord),
-            ("((?<=[^a-zA-Z0-9_\\.])|^)(decodeURI|encodeURI|decodeURIComponent|encodeURIComponent|escape|eval|isFinite|isNaN|parseFloat|parseInt|unescape|uneval)(?=\\s*\()", syntaxengine.SyntElemFunc)
+            mkrulePartUniqueWord()()(syngine.SyntElemValue)(*JS_NUM,re_shift=False),
+            mkrulePartUniqueWord()()(syngine.SyntElemValue)(*JS_SPECVAL),
+            mkruleFunc(*JS_FUNC),
+            mkruleClassType(*JS_TYPE),
+            JSStyleClassKeyword(*JS_KW_EXP),
+            mkruleKeyword(*JS_KW, pre_rule=JS_KW_NEWC),
+            mkruleTempGeneral()()()()(syngine.SyntElemSymbol)(
+                *JS_SYMBOL, pre_rule=JS_SYB_REGC)
         ]
 # }}}
 
 # golang syntax
-@syntaxengine.decoRegSyntax("golang")
+@syngine.decoRegSyntax("golang")
 def synt_golang(langStr):
     return "".join(("<pre class=\"lang-go\">","%s" % SyntTreeGolang(langStr),"</pre>"))
 
 # python syntax
-@syntaxengine.decoRegSyntax("python")
-def synt_golang(langStr):
+@syngine.decoRegSyntax("python")
+def synt_python(langStr):
     return "".join(("<pre class=\"lang-py\">","%s" % SyntTreePython(langStr),"</pre>"))
 
 # python syntax
-@syntaxengine.decoRegSyntax("javascript")
-def synt_golang(langStr):
+@syngine.decoRegSyntax("javascript")
+def synt_javascript(langStr):
     return "".join(("<pre class=\"lang-js\">","%s" % SyntTreeJS(langStr),"</pre>"))
+
+# C syntax
+@syngine.decoRegSyntax("c")
+def synt_c11(langStr):
+    return "".join(("<pre class=\"lang-c\">","%s" % SyntTreeC(langStr),"</pre>"))

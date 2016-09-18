@@ -17,6 +17,16 @@ Default syntax elements
     dsl         : domain specified language
     nosynt      : no syntax hi-light
 '''
+SYNSTY = {
+        "keyword":"synt-kw",
+        "symbol":"synt-syb",
+        "comment":"synt-cmt",
+        "type":"synt-typ",
+        "func":"synt-fnc",
+        "value":"synt-val",
+        "string":"synt-str",
+        "dsl":"synt-dsl"
+        }
 
 SYNTAX_PARESER = {}
 
@@ -37,35 +47,35 @@ class SyntElemNosynt(SyntElem):pass
 # Base: key word block
 class SyntElemKeyWord(SyntElem):
     def __str__(me):
-        return "".join(("<span class=\"synt-kw\">",me.shiftHTML(me.data),"</span>"))
+        return "".join(("<span class=\"",SYNSTY["keyword"],"\">",me.shiftHTML(me.data),"</span>"))
 # Base: symbol block
 class SyntElemSymbol(SyntElem):
     def __str__(me):
-        return "".join(("<span class=\"synt-syb\">",me.shiftHTML(me.data),"</span>"))
+        return "".join(("<span class=\"",SYNSTY["symbol"],"\">",me.shiftHTML(me.data),"</span>"))
 # Base: comment block
 class SyntElemComment(SyntElem):
     def __str__(me):
-        return "".join(("<span class=\"synt-cmt\">",me.shiftHTML(me.data),"</span>"))
+        return "".join(("<span class=\"",SYNSTY["comment"],"\">",me.shiftHTML(me.data),"</span>"))
 # Base: type block
 class SyntElemType(SyntElem):
     def __str__(me):
-        return "".join(("<span class=\"synt-typ\">",me.shiftHTML(me.data),"</span>"))
+        return "".join(("<span class=\"",SYNSTY["type"],"\">",me.shiftHTML(me.data),"</span>"))
 # Base: build-in function block
 class SyntElemFunc(SyntElem):
     def __str__(me):
-        return "".join(("<span class=\"synt-fnc\">",me.shiftHTML(me.data),"</span>"))
+        return "".join(("<span class=\"",SYNSTY["func"],"\">",me.shiftHTML(me.data),"</span>"))
 # Base: value block
 class SyntElemValue(SyntElem):
     def __str__(me):
-        return "".join(("<span class=\"synt-val\">",me.shiftHTML(me.data),"</span>"))
+        return "".join(("<span class=\"",SYNSTY["value"],"\">",me.shiftHTML(me.data),"</span>"))
 # Base: string block
 class SyntElemStr(SyntElem):
     def __str__(me):
-        return "".join(("<span class=\"synt-str\">",me.shiftHTML(me.data),"</span>"))
+        return "".join(("<span class=\"",SYNSTY["string"],"\">",me.shiftHTML(me.data),"</span>"))
 # Base: domain specified language block
 class SyntElemDSL(SyntElem):
     def __str__(me):
-        return "".join(("<span class=\"synt-dsl\">",me.shiftHTML(me.data),"</span>"))
+        return "".join(("<span class=\"",SYNSTY["dsl"],"\">",me.shiftHTML(me.data),"</span>"))
 
 # Base: syntax tree node
 class SyntTree(SyntElem):
