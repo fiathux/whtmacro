@@ -133,7 +133,7 @@ class SyntTreeC(syngine.SyntTreeParser):
             )
     # pre-build
     CStyMacroTemp = lambda pre_rule: mkruleTempGeneral(pre_rule)(
-            "(( |\\t)+([^\\n]|\\\\\\n|/\\*(.|\\s)*?\\*/)+|(\s*)((?=\\n)|(?=/\\*)|(?=//)))")()()
+            "(( |\\t)+(\\\\\\n|/\\*(.|\\s)*?\\*/|[^\\n])+|(\\s*)((?=\\n)|(?=/\\*)|(?=//)))")()()
     CStyMacroGen = CStyMacroTemp("(?<=\\n)( |\\t)*#") # General parser
     CStyMacroOnce = CStyMacroTemp("^( |\\t)*#") # First parser
     # Rule
