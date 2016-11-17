@@ -140,7 +140,10 @@ def opt_set(param):
     if "varb" not in ENV:
         ENV["varb"]={param[0]:param[1]}
     else:
-        ENV["varb"][param[0]]=str(param[1])
+        if sys.version_info.major < 3:
+            ENV["varb"][param[0]]=unicode(param[1])
+        else:
+            ENV["varb"][param[0]]=str(param[1])
     return ""
 
 #Plugin: variable get
