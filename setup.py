@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
         name = "whtmacro",
-        version = "0.2",
+        version = "0.3",
         keywords = "documention",
         description = "help create document use HTML template",
         license = "GPLv2",

@@ -66,8 +66,8 @@ class SyntCCommon(object):
     CSTY_STR = ("\"((\\\\\\\\|\\\\\")|[^\"])*\"", syngine.SyntElemStr)
     CSTY_CHAR = ("'((\\\\\\\\|\\\\')|[^'])*'", syngine.SyntElemStr)
     C_NUM = (
-            "[0-9]+((\\.[0-9]*)?([eE][\+-]?[0-9]+)?)", # integer or float
-            "\\.[0-9]+([eE][\+-]?[0-9]+)?", # simple float
+            "-?[0-9]+((\\.[0-9]*)?([eE][\+-]?[0-9]+)?)", # integer or float
+            "-?\\.[0-9]+([eE][\+-]?[0-9]+)?", # simple float
             "0x[0-9a-fA-F]+"    # hex
             )
     C_SPECVAL = ("true", "false", "NULL")
@@ -221,12 +221,13 @@ class SyntTreePython(syngine.SyntTreeParser):
             "0x[0-9a-fA-F]+" # hex integer
             )
     PYTH_SPECVAL = ("True", "False", "None")
-    PYTH_SYMBOL_REG = ("lambda","not +in","is +not","and","not","or","in","is")
+    PYTH_SYMBOL_REG = ("not +in","is +not","and","not","or","in","is")
     PYTH_SYMBOL = (
             "==", "!=", "<<", ">>", ">", "<", ">=", "<=", "=", ",", "(", ")",
             "[", "]", "{", "}", "//", "**", "|", "^", "&", "+", "-", "*", "/",
             "%", "~", ":", "."
             )
+    PYTH_SYMBOL_KW = ("lambda",)
     PYTH_FUNC_SEPC = (
             "new", "init", "del", "repr", "str", "lt", "le", "eq", "ne", "gt",
             "ge", "cmp", "rcmp", "hash", "nonzero", "unicode", "getattr", "setattr",
@@ -282,6 +283,7 @@ class SyntTreePython(syngine.SyntTreeParser):
             mkruleClassType(*PYTH_TYPE),
             mkruleTempGeneral()()()()(syngine.SyntElemSymbol)(
                 *PYTH_SYMBOL, pre_rule=PYTH_SYB_REGC),
+            mkrulePartUniqueWord()()(syngine.SyntElemSymbol)(*PYTH_SYMBOL_KW),
             mkruleKeyword(*PYTH_KW)
         ]
 # }}}
@@ -317,7 +319,7 @@ class SyntTreeJS(syngine.SyntTreeParser):
             "*?(;|\\n)")), SyntTreeJSImport)
     # Word and element
     JS_NUM = SyntCCommon.C_NUM
-    JS_SPECVAL = ("true", "true", "null", "NaN", "Infinity")
+    JS_SPECVAL = ("true", "false", "null", "NaN", "Infinity")
     JS_KW_NEW = ("function\\s*\\*", "yield\\s*\\*")
     JS_KW = (
             "=>", "var", "let", "const", "function", "yield", "for", "if", "else",
@@ -366,6 +368,77 @@ class SyntTreeJS(syngine.SyntTreeParser):
         ]
 # }}}
 
+# Javascript syntax tree {{{
+class SyntTreeLua(syngine.SyntTreeParser):
+    LUA_NUM = SyntCCommon.CSTY_NUM
+    LUA_COMMENT = ("--\\[(?P<eq>=*)\\[(.|\\s)*?\\](?P=eq)\\]", syngine.SyntElemComment)
+    LUA_COMMENT_LINE = ("--.*?(?=\\n)", syngine.SyntElemComment)
+    LUA_STR_ML = ("\\[(?P<eq>=*)\\[(.|\\s)*?\\](?P=eq)\\]",syngine.SyntElemStr)
+    LUA_KW = (
+            "and", "break", "do", "else", "elseif", "end",
+            "false", "for", "function", "goto", "if", "in",
+            "local", "nil", "not", "or", "repeat", "return",
+            "then", "true", "until", "while",
+            )
+    LUA_SYMBOL = (
+            "+", "-", "*", "/", "%", "^", "#",
+            "&", "~", "|", "<<", ">>", "//",
+            "==", "~=", "<=", ">=", "<", ">", "=",
+            "(", ")", "{", "}", "[", "]", "::",
+            ";", ":", ",", ".", "..", "...",
+            )
+    LUA_FUNC = ("_G", "_VERSION", "assert", "collectgarbage", "dofile", "error",
+            "getmetatable", "ipairs", "load", "loadfile", "next", "pairs",
+            "pcall", "print", "rawequal", "rawget", "rawlen", "rawset", "require",
+            "select", "setmetatable", "tonumber", "tostring", "type", "xpcall",
+            "coroutine.create", "coroutine.isyieldable", "coroutine.resume",
+            "coroutine.running", "coroutine.status", "coroutine.wrap",
+            "coroutine.yield", "debug.debug", "debug.gethook", "debug.getinfo",
+            "debug.getlocal", "debug.getmetatable", "debug.getregistry",
+            "debug.getupvalue", "debug.getuservalue", "debug.sethook",
+            "debug.setlocal", "debug.setmetatable", "debug.setupvalue",
+            "debug.setuservalue", "debug.traceback", "debug.upvalueid",
+            "debug.upvaluejoin", "io.close", "io.flush", "io.input",
+            "io.lines", "io.open", "io.output", "io.popen", "io.read",
+            "io.stderr", "io.stdin", "io.stdout", "io.tmpfile", "io.type",
+            "io.write", "file:close", "file:flush", "file:lines", "file:read",
+            "file:seek", "file:setvbuf", "file:write", "math.abs", "math.acos",
+            "math.asin", "math.atan", "math.ceil", "math.cos", "math.deg",
+            "math.exp", "math.floor", "math.fmod", "math.huge", "math.log",
+            "math.max", "math.maxinteger", "math.min", "math.mininteger",
+            "math.modf", "math.pi", "math.rad", "math.random",
+            "math.randomseed", "math.sin", "math.sqrt", "math.tan",
+            "math.tointeger", "math.type", "math.ult", "os.clock", "os.date",
+            "os.difftime", "os.execute", "os.exit", "os.getenv", "os.remove",
+            "os.rename", "os.setlocale", "os.time", "os.tmpname", "package",
+            "package.config", "package.cpath", "package.loaded",
+            "package.loadlib", "package.path", "package.preload",
+            "package.searchers", "package.searchpath", "string.byte",
+            "string.char", "string.dump", "string.find", "string.format",
+            "string.gmatch", "string.gsub", "string.len", "string.lower",
+            "string.match", "string.pack", "string.packsize", "string.rep",
+            "string.reverse", "string.sub", "string.unpack", "string.upper",
+            "table.concat", "table.insert", "table.move", "table.pack",
+            "table.remove", "table.sort", "table.unpack", "utf8.char",
+            "utf8.charpattern", "utf8.codepoint", "utf8.codes", "utf8.len",
+            "utf8.offset",
+            )
+    RULE = [
+            [
+                LUA_COMMENT,
+                LUA_COMMENT_LINE,
+                SyntCCommon.CSTY_STR,
+                SyntCCommon.CSTY_CHAR,
+                LUA_STR_ML,
+            ],
+            LUA_NUM,
+            mkruleKeyword(*LUA_KW),
+            mkruleFunc(*LUA_FUNC),
+            mkruleSymbol(*LUA_SYMBOL),
+        ]
+
+#}}}
+
 # golang syntax
 @syngine.decoRegSyntax("golang")
 def synt_golang(langStr):
@@ -385,3 +458,8 @@ def synt_javascript(langStr):
 @syngine.decoRegSyntax("c")
 def synt_c11(langStr):
     return "".join(("<pre class=\"lang-c\">","%s" % SyntTreeC(langStr),"</pre>"))
+
+# Lua syntax
+@syngine.decoRegSyntax("lua")
+def synt_lua(langStr):
+    return "".join(("<pre class=\"lang-c\">","%s" % SyntTreeLua(langStr),"</pre>"))
