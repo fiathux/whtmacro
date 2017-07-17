@@ -368,7 +368,7 @@ class SyntTreeJS(syngine.SyntTreeParser):
         ]
 # }}}
 
-# Javascript syntax tree {{{
+# Lua syntax tree {{{
 class SyntTreeLua(syngine.SyntTreeParser):
     LUA_NUM = SyntCCommon.CSTY_NUM
     LUA_COMMENT = ("--\\[(?P<eq>=*)\\[(.|\\s)*?\\](?P=eq)\\]", syngine.SyntElemComment)
