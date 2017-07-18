@@ -38,6 +38,7 @@ class SValue(SElement):
     PARSE_SPECFLOAT = re.compile("^([\\+\\-])?(Inf|NaN)$")
     PARSE_BOOL = re.compile("^(TRUE|FALSE)$")
     PARSE_NONE = re.compile("^Nil$")
+    PARSE_SHIFTSTR = re.compile("^\\[\\[(?P<quote>-{,5})\\[(.*)\\](?P=quote)\\]\\]$",re.S)
 
     def __init__(me, val, ln = 0, cn = 0):
         me.value, me.type = me.type_int(val) or me.type_numeric(val) or me.type_bool(val) or\
@@ -69,24 +70,24 @@ class SValue(SElement):
         def convnumeric(v):
             mch = c.PARSE_NUM.match(v)
             return mch and ( eval("%s%s%s" % (
-                mch.group(1),
-                mch.group(9),
-                (mch.group(15) and "j") or ""
+                mch.group(1) or "",
+                mch.group(9) or "",
+                ((mch.group(15) and "j") or "")
                 ) ), "numeric")
         def convspecial(v):
-            mch = c.PARSE_NUM.match(v)
-            return (float(v.group(2)) * ((v.group(1) == "-" and -1) or 1), "numeric")
+            mch = c.PARSE_SPECFLOAT.match(v)
+            return mch and (float(mch.group(2)) * ((mch.group(1) == "-" and -1) or 1), "numeric")
         return convnumeric(val) or convspecial(val)
 
     # parse convert none
     @classmethod
     def type_none(c,val):
-        return c.PARSE_NONE(val) and (None, "none")
+        return c.PARSE_NONE.match(val) and (None, "none")
 
     # parse convert boolean
     @classmethod
-    def type_bool(c,val);
-        return c.PARSE_BOOL(val) and (val == "TRUE", "bool")
+    def type_bool(c,val):
+        return c.PARSE_BOOL.match(val) and (val == "TRUE", "bool")
 
     # parse convert string
     @classmethod
@@ -100,37 +101,84 @@ class SValue(SElement):
         def convquote(v):
             mch = v and (v[0] == v[-1]) and (v[0] == "'" or v[0] == '"') and len(v) > 1
             return mch and (escapechar(v[1:-1]), "string")
+        def convshiftstr(v):
+            mch = c.PARSE_SHIFTSTR.match(v)
+            return mch and (mch.group(2), "string")
         def fullstr(v):
             return (escapechar((v and v) or ""), "string")
-        return convquote(val) or fullstr(val)
+        return convquote(val) or convshiftstr(val) or fullstr(val)
 #}}}
 
 # S-Expression function prototype{{{
 class SExpression(SElement):
-    CALL = lambda name,param: return [name, [p() for p in param] if param else None]
-
-    def __init__(me, expstr, ln = 0, cn = 0):
+    def __init__(me, exp_gen, env, ln = 0, cn = 0):
         me.type = "expression"
+        me.env = SScope(env)
         me.line = ln
         me.column = cn
         # value list must defined in s-function
-        me.list = []
+        me._Lisp = [itm for itm in exp_gen(me.env)]
+
+    @classmethod
+    def call(c,name,param):
+        return [name] + ([p() for p in param] if param else [])
 
     def __call__(me):
-        return me.CALL(me.list[0], (exp() for exp in me.list[1:]))
+        return me.call(me._Lisp[0], (exp() for exp in me._Lisp[1:]))
 #}}}
+
+# basic data environment scope class {{{
+class SScope(dict):
+    def __init__(me,parent = None):
+        def keyerror(k):
+            raise KeyError(k)
+        # scope chain oprations
+        me.backward = lambda : parent # backward scope
+        if parent:
+            me.setGlb = lambda k,v: parent.setGlb(k,v)  # set value to root
+            me.getGlb = lambda k: parent.getGlb(k)      # get value from root
+            me.delGlb = lambda k: parent.delGlb(k)      # delete value from root
+            me.inGlb = lambda k: parent.inGlb(k)        # check value in root
+            me.getPar = lambda k: parent[k]             # get value from parent
+            me.inPar = lambda k: k in parent            # check value in parent
+        else: # root scope
+            me.setGlb = lambda k,v: me.__setitem__(k,v)
+            me.getGlb = lambda k: me[k]
+            me.delGlb = lambda k: me.__delitem__(k)
+            me.inGlb = lambda k: me._contians(k)
+            me.getPar = lambda k: keyerror(k)
+            me.inPar = lambda k: False
+
+    def __getitem__(me,key):
+        return super(SScope,me).__getitem__(key) if me.contains(key) else me.getPar(key)
+
+    def __contains__(me,key):
+        return me.contains(key) or me.inPar(key)
+
+    def contains(me,key):
+        return super(SScope,me).__contains__(key)
+#}}}
+
+_MODULE_ENV = SScope()
+
+# make default S-Expression Node factory
+def mkModSFactroy(expClass = SExpression)
+    def moduleSFactory(expiter, env):
+        pass
 
 EPARSE_GENERAL = re.compile("^(\\\\\\\\|\\\\\\s|\\S)+")
 EPARSE_DQUOTE = re.compile("^\"(\\\\\\\\|\\\\\"|[^\"])*\"")
 EPARSE_QUOTE = re.compile("^'(\\\\\\\\|\\\\'|[^'])*'")
+EPARSE_SHIFTSTR = re.compile("^\\[\\[(?P<quote>-{,5})\\[(.*?)\\](?P=quote)\\]\\]",re.S)
 
-# export S-Expression parser
-def SExpParser(exp_str, ln = 0, cn = 0, element = SElement):
-    if exp_str[0] != "(" or exp_str[-1] != ")":
-        raise excSExp("string is not an expression")
-    def iterElem(s):
-        stacks = [(ln,cn)
-        for i in range(0,len(s)):
-    def export():
-        return iterElem(s[1:-1])
-    return export
+# export S-Expression parser factroy
+def SParseFactory(expFactory = mkModSFactroy()):
+    def SParser(exp_str, ln = 0, cn = 0):
+        def iterElem(s):
+            stacks = [(ln,cn)]
+            for i in range(0,len(s)):
+                pass
+        def export():
+            return iterElem(s[1:-1])
+        return export
+    return SExpParser
