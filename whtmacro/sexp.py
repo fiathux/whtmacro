@@ -11,17 +11,29 @@ Fiathu Su(fiathux@gmail.com)
 from __future__ import unicode_literals
 
 import re
+from collections import namedtuple
+from whtmacro import searchTree
+
+class SPosition(namedtuple("SPosition",["line","column","start","end"])):pass
 
 # module exception prototype
-class excSExp(Exception):pass
+class excSExp(Exception):
+    def __init__(me, pos, msg = ""):
+        me.position = pos
+        me.message = msg
+    def __str__(me):
+        return "s-expression error in position ln:%d, col:%d%s" % (
+                me.position.line,
+                me.position.column,
+                " - %s" % msg if msg else "",
+                )
 
 # S-Expression element prototype{{{
 class SElement(object):
-    # the members "type", "line" and "column" must defined in every implement
+    # the members "type" and "position" must defined in every implement
     def __init__(me):
         me.type = "element"
-        me.line = None
-        me.column = None
+        me.position = SPosition(0,0,0,0)
 
     # the call method return a result of expression
     def  __call__(me):
@@ -40,12 +52,11 @@ class SValue(SElement):
     PARSE_NONE = re.compile("^Nil$")
     PARSE_SHIFTSTR = re.compile("^\\[\\[(?P<quote>-{,5})\\[(.*)\\](?P=quote)\\]\\]$",re.S)
 
-    def __init__(me, val, ln = 0, cn = 0):
+    def __init__(me, val, pos = SPosition(0,0,0,0)):
         me.value, me.type = me.type_int(val) or me.type_numeric(val) or me.type_bool(val) or\
                 me.type_none(val) or me.type_string(val)
         me.expression = val
-        me.line = ln
-        me.column = cn
+        me.position = pos
 
     def __call__(me):
         return me.value
@@ -111,13 +122,20 @@ class SValue(SElement):
 
 # S-Expression function prototype{{{
 class SExpression(SElement):
-    def __init__(me, exp_gen, env, ln = 0, cn = 0):
+    def __init__(me, exp_gen, env, pos = SPosition(0,0,0,0)):
         me.type = "expression"
+        me.position = pos
         me.env = SScope(env)
-        me.line = ln
-        me.column = cn
         # value list must defined in s-function
         me._Lisp = [itm for itm in exp_gen(me.env)]
+        if me._Lisp:
+            me.closeExp(me._Lisp[-1].position.end)
+        else:
+            raise excSExp(pos,"invalid empty expression")
+
+    # set end-point of exporession
+    def closeExp(me,endpoint):
+        me.position = SPosition(pos.line, pos.column, pos.start, endpoint)
 
     @classmethod
     def call(c,name,param):
@@ -163,22 +181,65 @@ _MODULE_ENV = SScope()
 
 # make default S-Expression Node factory
 def mkModSFactroy(expClass = SExpression)
-    def moduleSFactory(expiter, env):
+    def moduleSFactory(expmaker, env, pos):
         pass
 
-EPARSE_GENERAL = re.compile("^(\\\\\\\\|\\\\\\s|\\S)+")
+EPARSE_STRIP = re.compile("\S")
+EPARSE_GENERAL = re.compile("^(\\\\\\\\|\\\\\\s|\\\\\\)|[^\\s\\)])+")
 EPARSE_DQUOTE = re.compile("^\"(\\\\\\\\|\\\\\"|[^\"])*\"")
 EPARSE_QUOTE = re.compile("^'(\\\\\\\\|\\\\'|[^'])*'")
 EPARSE_SHIFTSTR = re.compile("^\\[\\[(?P<quote>-{,5})\\[(.*?)\\](?P=quote)\\]\\]",re.S)
 
 # export S-Expression parser factroy
 def SParseFactory(expFactory = mkModSFactroy()):
-    def SParser(exp_str, ln = 0, cn = 0):
-        def iterElem(s):
-            stacks = [(ln,cn)]
-            for i in range(0,len(s)):
-                pass
+    lnIndex = searchTree.SearchRBTree(lambda a,b: 1 if a[0]>b[1] else (-1 if a[1]<b[0] else 0))
+    # normalize text line information
+    def linelize(exp, orig_ln, org_cn):
+        def getPosFunc(linenum,linekey):
+            return (linekey ,
+                    lambda idx: linenum + orig_ln ,idx - linekey[0] + (0 if linenum else org_cn))
+        lnfind = re.compile("\n")
+        lnnum = 0
+        lnstart = 0
+        for lnpos in lnfind.finditer(exp):
+            yield getPosFunc(lnnum, (lnstart, lnpos.start()))
+            lnnum = lnnum + 1
+            lnstart = lnpos.end()
+        if lnstart < len(exp):
+            yield getPosFunc(lnnum, (lnstart, len(exp)))
+    def index2position(index):
+        lninf = lnIndex.find((index,index))(index)
+        return SPosition(lninf[0], lninf[1], index, index)
+    # expression parser
+    def SParser(exp_str, initenv, ln = 0, cn = 0):
+        # make line serial
+        exp_str = exp_str.replace("\r\n","\n").replace("\r","\n")
+        for lkey,lproc in linelize(exp_str, ln, cn): lnIndex.add(lkey,lproc)
+        stacks = [(ln,cn)] # syntax stack
+        def enterExpStack(s, index, env):
+            itrLmd = lambda exenv: iterElem(s, index + 1, exenv)
+            pos = index2position(index)
+            rst = expFactory(itrLmd, env, pos)
+            endidx = rst.position.end + 1
+            if len(s) < endidx:
+                mch = EPARSE_STRIP.search(s,endidx)
+                if mch and s[mch.start()] == ")":
+                    rst.closeExp(mch.start())
+                    return rst
+            raise excSExp(pos, "Incomplete expression")
+        # element iterator
+        def iterElem(s, index, env):
+            while True:
+                start_point = EPARSE_STRIP.search(s, index)
+                if not start_point: return
+                if s[start_point.start()] == ")": return
+                if s[start_point.start()] == "(":
+                    pass
+                else:
+                    pass
+
+        # export parser
         def export():
-            return iterElem(s[1:-1])
+            return iterElem(s, 0, initenv)
         return export
     return SExpParser
