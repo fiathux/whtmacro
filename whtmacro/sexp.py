@@ -192,13 +192,6 @@ class SScope(dict):
 
 _MODULE_ENV = SScope()
 
-# make default S-Expression Node factory
-def mkModSFactroy(expClass = SExpression):
-    return expClass
-
-def mkValFactory(valClass = SValue):
-    return valClass
-
 # context parser regexp {{{
 EPARSE_STRIP = re.compile("\S")
 EPARSE_GENERAL = re.compile("(\\\\\\\\|\\\\\\s|\\\\\\(|\\\\\\)|[^\\s\\(\\)])+")
@@ -209,7 +202,9 @@ EPARSE_PACKSTART = re.compile("[\"']|\\[\\[-{,5}\\[")
 #}}}
 
 # export S-Expression parser factroy {{{
-def SParseFactory(expFactory = mkModSFactroy(), valFactory = mkValFactory()):
+# expression factory prototype: factory(exp_iter, env, position)
+# values factory prototype: factory(exp_str, position, env)
+def SParseFactory(expFactory = SExpression, valFactory = SValue):
     # expression parser
     def SParser(exp_str, initenv = _MODULE_ENV, start = 0, ln = 0, cn = 0):
         lnIndex = searchTree.SearchRBTree(lambda a,b: 1 if a[0]>b[1] else (-1 if a[1]<b[0] else 0))

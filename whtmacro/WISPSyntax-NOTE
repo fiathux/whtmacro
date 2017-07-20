@@ -1,0 +1,98 @@
+==================================================================================================
+
+The WISP syntax element
+
+==================================================================================================
+
+Data type:
+
+string      : any string
+integer     : integer number such as 0 ,1 ,2 ,-1, -1234
+number      : all real-number and imag-number
+boolean     : TRUE or FALSE value
+none        : Nil value
+expression  : callable expression
+list        : a linked list
+key-value   : key-value paire
+dictionary  : key-value paire assembly with key index
+Upackable   : an expression squence. it can upack to every expressions
+origin      : packed original python object
+
+--------------------------------------------------------------------------------------------------
+
+Opreator:
+
+  Serial operator:
+    (add p0 p1 p2 ...) (+ p0 p1 p2 ...)     add concat
+    (dec p0 p1 p2 ...) (- p0 p1 p2 ...)     dec
+    (mut p0 p1 p2 ...) (* p0 p1 p2 ...)     mult
+    (div p0 p1 p2 ...) (/ p0 p1 p2 ...)     div
+    (_xor p0 p1 p2 ...) (^ p0 p1 p2 ...)    bit-wise xor
+    (_and p0 p1 p2 ...) (& p0 p1 p2 ...)    bit-wise and
+    (_or p0 p1 p2 ...) (| p0 p1 p2 ...)     bit-wise or
+    (gt p0 p1 p2 ...)                       great-than
+    (lt p0 p1 p2 ...)                       less-than
+    (gtq p0 p1 p2 ...)                      great-than or equal
+    (ltq p0 p1 p2 ...)                      less-than or equal
+    (eq p0 p1 p2 ...)                       equal
+    (and p0 p1 p2 ...)                      logical and
+    (or p0 p1 p2 ...)                       logical or
+    (xor p0 p1 p2 ...)                      logical xor
+    (nil p0 p1 p2 ...)                      check if value is all Nil
+
+  Unpackable operator:
+    (_not p0 p1 p2 ...) (~ p0 p1 p2 ...)    bit-wise reverse
+    (str p0 p1 p2 ...) ($ p0 p1 p2 ...)     to string
+    (not p0 p1 p2 ...)                      logical not
+
+  Limited member operator:
+
+    (mod a b) (% a b)                 a mod b
+    (shr v c)                         bit-wise shift right v >> c
+    (shl v c)                         bit-wise shift left v << c
+    (if boolean true-exp false-exp)   logical option
+
+Structure:
+
+    (p name value)            define key-value paire
+    (li p0 p1 p2 ...)         define list
+    (dict pare0 pare1 ...)    define dictionary
+    (f index obj)             find member from list, dictionary or Upackable
+    (in index obj)            check if member in list or Upackable. in dictionary it check keys
+                              exists
+    (len obj)                 get length of list, dictionary or Upackable
+    (upd obj p0 p1 p2)        update member to list or dictionary
+    (rm obj key0 key1 ...)    remove member from list or dictionary
+    (keys dict0 dict1 ...)    enum key to a list from dictionary
+    (pars dict0 dict1 ...)    enum key-value paire to a list from dictionary
+    (oder "asc"/"desc" p0 p1 ...)     sorting list
+    (upk obj0 obj1 ...)       unpack all struct to Unpackable (dictionary unpack values)
+
+Functional:
+
+    (lmd (name-list) (expression...))     lambda exprssion
+    (map (lmd a) p0 p1 p2 ...)            map values
+    (reduce (lmd a b) p0 p1 p2 ...)       reduce values
+    (filter (lmd a b) p0 p1 p2 ...)       filter values
+
+Environment:
+
+    (let name expression...)      set expression to current environment
+    (get name) (. name)           get expression from environment
+    (exist name0 name1...)        check names exist
+    (glet name expression...)     set expression for global, if exists it will raise an Exception
+    (gset name expression...)     set or change expression for global (not recommend)
+    (gget name expression...)     force get expression from global
+    (gexist name0 name1...)       check names in global is exist
+    (gdel name0 name1 ...)        delete names in global (not recommend)
+
+System:
+
+    (include filename filename ...)     include files just like a string
+    (import filename filename ...)      import files as script in current environment
+    (gimport filename filename ...)     import files as script in global enviroment
+    (pcall name p0 p1 p2 ...)           call original python function
+    (pimport module module ...)         import python modules
+    (pypy p0 p1 p2 ...)                 execute string as python script
+
+--------------------------------------------------------------------------------------------------
