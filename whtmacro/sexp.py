@@ -14,7 +14,18 @@ import re
 from collections import namedtuple
 from whtmacro import searchTree
 
-class SPosition(namedtuple("SPosition",["line","column","start","end"])):pass
+MAX_STACK_DEPTH = 200
+
+# Support class{{{
+# S-Context position class
+class SPosition(namedtuple("SPosition",["line","column","start","end"])):
+    def renew(me, line = None, column = None, start = None, end = None):
+        return SPosition(
+                me.line if line is None else line,
+                me.column if column is None else column,
+                me.start if start is None else start,
+                me.end if end is None else end
+                )
 
 # module exception prototype
 class excSExp(Exception):
@@ -25,8 +36,9 @@ class excSExp(Exception):
         return "s-expression error in position ln:%d, col:%d%s" % (
                 me.position.line,
                 me.position.column,
-                " - %s" % msg if msg else "",
+                " - %s" % me.message if me.message else "",
                 )
+#}}}
 
 # S-Expression element prototype{{{
 class SElement(object):
@@ -40,7 +52,7 @@ class SElement(object):
         return None
 #}}}
 
-# S-Expression element class{{{
+# S-Expression value element class{{{
 class SValue(SElement):
     # data-type parser
     PARSE_INT = re.compile("^([\\+\\-])?([1-9][0-9]*|0)$")
@@ -52,7 +64,7 @@ class SValue(SElement):
     PARSE_NONE = re.compile("^Nil$")
     PARSE_SHIFTSTR = re.compile("^\\[\\[(?P<quote>-{,5})\\[(.*)\\](?P=quote)\\]\\]$",re.S)
 
-    def __init__(me, val, pos = SPosition(0,0,0,0)):
+    def __init__(me, val, pos = SPosition(0,0,0,0), env = None):
         me.value, me.type = me.type_int(val) or me.type_numeric(val) or me.type_bool(val) or\
                 me.type_none(val) or me.type_string(val)
         me.expression = val
@@ -105,7 +117,7 @@ class SValue(SElement):
     def type_string(c,val):
         def escapechar(s):
             return "\\".join(
-                    map(lambda ss: re.sub("\\\\([ \\(\\)'\"])","\g<1>",ss).replace(
+                    map(lambda ss: re.sub("\\\\([ \\(\\)'\"\\[])","\g<1>",ss).replace(
                         "\\n","\n").replace("\\t","\t"),
                     s.split("\\\\"))
                     )
@@ -125,7 +137,7 @@ class SExpression(SElement):
     def __init__(me, exp_gen, env, pos = SPosition(0,0,0,0)):
         me.type = "expression"
         me.position = pos
-        me.env = SScope(env)
+        me.env = SScope(env, me)
         # value list must defined in s-function
         me._Lisp = [itm for itm in exp_gen(me.env)]
         if me._Lisp:
@@ -135,23 +147,24 @@ class SExpression(SElement):
 
     # set end-point of exporession
     def closeExp(me,endpoint):
-        me.position = SPosition(pos.line, pos.column, pos.start, endpoint)
+        me.position = me.position.renew(end = endpoint)
 
     @classmethod
     def call(c,name,param):
-        return [name] + ([p() for p in param] if param else [])
+        return [name] + ([p for p in param] if param else [])
 
     def __call__(me):
-        return me.call(me._Lisp[0], (exp() for exp in me._Lisp[1:]))
+        return me.call(me._Lisp[0](), (exp() for exp in me._Lisp[1:]))
 #}}}
 
 # basic data environment scope class {{{
 class SScope(dict):
-    def __init__(me,parent = None):
+    def __init__(me,parent = None, owner = None):
         def keyerror(k):
             raise KeyError(k)
         # scope chain oprations
         me.backward = lambda : parent # backward scope
+        me.owner = owner
         if parent:
             me.setGlb = lambda k,v: parent.setGlb(k,v)  # set value to root
             me.getGlb = lambda k: parent.getGlb(k)      # get value from root
@@ -180,66 +193,100 @@ class SScope(dict):
 _MODULE_ENV = SScope()
 
 # make default S-Expression Node factory
-def mkModSFactroy(expClass = SExpression)
-    def moduleSFactory(expmaker, env, pos):
-        pass
+def mkModSFactroy(expClass = SExpression):
+    return expClass
 
+def mkValFactory(valClass = SValue):
+    return valClass
+
+# context parser regexp {{{
 EPARSE_STRIP = re.compile("\S")
-EPARSE_GENERAL = re.compile("^(\\\\\\\\|\\\\\\s|\\\\\\)|[^\\s\\)])+")
-EPARSE_DQUOTE = re.compile("^\"(\\\\\\\\|\\\\\"|[^\"])*\"")
-EPARSE_QUOTE = re.compile("^'(\\\\\\\\|\\\\'|[^'])*'")
-EPARSE_SHIFTSTR = re.compile("^\\[\\[(?P<quote>-{,5})\\[(.*?)\\](?P=quote)\\]\\]",re.S)
+EPARSE_GENERAL = re.compile("(\\\\\\\\|\\\\\\s|\\\\\\(|\\\\\\)|[^\\s\\(\\)])+")
+EPARSE_DQUOTE = re.compile("\"(\\\\\\\\|\\\\\"|[^\"])*\"")
+EPARSE_QUOTE = re.compile("'(\\\\\\\\|\\\\'|[^'])*'")
+EPARSE_SHIFTSTR = re.compile("\\[\\[(?P<quote>-{,5})\\[(.*?)\\](?P=quote)\\]\\]",re.S)
+EPARSE_PACKSTART = re.compile("[\"']|\\[\\[-{,5}\\[")
+#}}}
 
-# export S-Expression parser factroy
-def SParseFactory(expFactory = mkModSFactroy()):
-    lnIndex = searchTree.SearchRBTree(lambda a,b: 1 if a[0]>b[1] else (-1 if a[1]<b[0] else 0))
-    # normalize text line information
-    def linelize(exp, orig_ln, org_cn):
-        def getPosFunc(linenum,linekey):
-            return (linekey ,
-                    lambda idx: linenum + orig_ln ,idx - linekey[0] + (0 if linenum else org_cn))
-        lnfind = re.compile("\n")
-        lnnum = 0
-        lnstart = 0
-        for lnpos in lnfind.finditer(exp):
-            yield getPosFunc(lnnum, (lnstart, lnpos.start()))
-            lnnum = lnnum + 1
-            lnstart = lnpos.end()
-        if lnstart < len(exp):
-            yield getPosFunc(lnnum, (lnstart, len(exp)))
-    def index2position(index):
-        lninf = lnIndex.find((index,index))(index)
-        return SPosition(lninf[0], lninf[1], index, index)
+# export S-Expression parser factroy {{{
+def SParseFactory(expFactory = mkModSFactroy(), valFactory = mkValFactory()):
     # expression parser
-    def SParser(exp_str, initenv, ln = 0, cn = 0):
+    def SParser(exp_str, initenv = _MODULE_ENV, start = 0, ln = 0, cn = 0):
+        lnIndex = searchTree.SearchRBTree(lambda a,b: 1 if a[0]>b[1] else (-1 if a[1]<b[0] else 0))
+        # support{{{
+        # normalize text line information
+        def linelize(exp, orig_ln, org_cn):
+            def getPosFunc(linenum,linekey):
+                return (linekey ,
+                        lambda idx: (linenum + orig_ln ,
+                            idx - linekey[0] + (0 if linenum else org_cn)))
+            lnfind = re.compile("\n")
+            lnnum = 0
+            lnstart = 0
+            for lnpos in lnfind.finditer(exp):
+                yield getPosFunc(lnnum, (lnstart, lnpos.start()))
+                lnnum = lnnum + 1
+                lnstart = lnpos.end()
+            if lnstart < len(exp):
+                yield getPosFunc(lnnum, (lnstart, len(exp)))
+        # convert string index to position object
+        def index2position(index,end = None):
+            lninf = lnIndex.find((index,index))(index)
+            return SPosition(lninf[0], lninf[1], index, end if end else index)
+        #}}}
         # make line serial
         exp_str = exp_str.replace("\r\n","\n").replace("\r","\n")
         for lkey,lproc in linelize(exp_str, ln, cn): lnIndex.add(lkey,lproc)
-        stacks = [(ln,cn)] # syntax stack
+        stack_depth = [] # syntax stack
+        # element build{{{
+        # create expression element
         def enterExpStack(s, index, env):
-            itrLmd = lambda exenv: iterElem(s, index + 1, exenv)
             pos = index2position(index)
-            rst = expFactory(itrLmd, env, pos)
-            endidx = rst.position.end + 1
-            if len(s) < endidx:
-                mch = EPARSE_STRIP.search(s,endidx)
-                if mch and s[mch.start()] == ")":
-                    rst.closeExp(mch.start())
-                    return rst
-            raise excSExp(pos, "Incomplete expression")
+            if len(stack_depth) > MAX_STACK_DEPTH:
+                raise excSExp(pos, "Stack depth overflow")
+            itrLmd = lambda exenv: iterElem(s, index + 1, exenv)
+            stack_depth.append(pos) # push syntax stack
+            try:
+                rst = expFactory(itrLmd, env, pos)
+                endidx = rst.position.end
+                if len(s) >= endidx:
+                    mch = EPARSE_STRIP.search(s,endidx)
+                    if mch and s[mch.start()] == ")":
+                        rst.closeExp(mch.start() + 1)
+                        return rst
+                raise excSExp(pos, "Incomplete expression")
+            finally:
+                stack_depth.pop() # pop syntax stack
+        # create value element
+        def oneElement(s, index, env):
+            if EPARSE_PACKSTART.match(s,index):
+                exp_ang = EPARSE_SHIFTSTR.match(s,index) or EPARSE_QUOTE.match(s,index) or \
+                        EPARSE_DQUOTE.match(s,index)
+                if not exp_ang:
+                    raise excSExp(index2position(index), "Unexcepted end of string")
+            else:
+                exp_ang = EPARSE_GENERAL.match(s,index)
+            pos = index2position(index, exp_ang.end())
+            return valFactory(s[index:exp_ang.end()], pos, env)
+        #}}}
         # element iterator
-        def iterElem(s, index, env):
-            while True:
+        def iterElem(s, index, env, atroot = False):
+            while index < len(s):
                 start_point = EPARSE_STRIP.search(s, index)
                 if not start_point: return
-                if s[start_point.start()] == ")": return
-                if s[start_point.start()] == "(":
-                    pass
-                else:
-                    pass
-
+                if s[start_point.start()] == ")":
+                    if not atroot: # close expression
+                        return
+                    else: # Unexpected close
+                        raise excSExp(index2position(start_point.start()),
+                            "Unexpected praentthese")
+                rst = (enterExpStack if s[start_point.start()] == "(" else oneElement)(
+                        s, start_point.start(), env)
+                yield rst
+                index = rst.position.end
         # export parser
         def export():
-            return iterElem(s, 0, initenv)
+            return iterElem(exp_str, start, initenv, True)
         return export
-    return SExpParser
+    return SParser
+#}}}
