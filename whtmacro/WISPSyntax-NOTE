@@ -54,10 +54,10 @@ Opreator:
 
 Structure:
 
-    (p name value)            define key-value paire
+    (kv name value)           define key-value paire
     (li p0 p1 p2 ...)         define list
     (dict pare0 pare1 ...)    define dictionary
-    (f index obj)             find member from list, dictionary or Upackable
+    (itm index obj)           find member from list, dictionary or Upackable
     (in index obj)            check if member in list or Upackable. in dictionary it check keys
                               exists
     (len obj)                 get length of list, dictionary or Upackable
