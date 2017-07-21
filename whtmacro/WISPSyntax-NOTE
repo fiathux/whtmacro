@@ -1,35 +1,38 @@
 ==================================================================================================
 
-The WISP syntax element
+ The WISP syntax element
 
 ==================================================================================================
 
 Data type:
 
-string      : any string
-integer     : integer number such as 0 ,1 ,2 ,-1, -1234
-number      : all real-number and imag-number
-boolean     : TRUE or FALSE value
-none        : Nil value
-expression  : callable expression
-list        : a linked list
-key-value   : key-value paire
-dictionary  : key-value paire assembly with key index
-Upackable   : an expression squence. it can upack to every expressions
-origin      : packed original python object
+string        : any string
+integer       : integer number such as 0 ,1 ,2 ,-1, -1234
+number        : all real-number and imag-number
+boolean       : TRUE or FALSE value
+none          : Nil value
+expression    : callable expression
+list          : a linked list
+tuple         : a fixed list
+key-value     : key-value paire
+dictionary    : key-value paire assembly with key index
+Upackable     : an expression squence. it can upack to every expressions
+origin        : packed original python object
 
 --------------------------------------------------------------------------------------------------
 
 Opreator:
 
   Serial operator:
+
     (add p0 p1 p2 ...) (+ p0 p1 p2 ...)     add concat
     (dec p0 p1 p2 ...) (- p0 p1 p2 ...)     dec
     (mut p0 p1 p2 ...) (* p0 p1 p2 ...)     mult
-    (div p0 p1 p2 ...) (/ p0 p1 p2 ...)     div
-    (_xor p0 p1 p2 ...) (^ p0 p1 p2 ...)    bit-wise xor
-    (_and p0 p1 p2 ...) (& p0 p1 p2 ...)    bit-wise and
-    (_or p0 p1 p2 ...) (| p0 p1 p2 ...)     bit-wise or
+    (div p0 p1 p2 ...) (/ p0 p1 p2 ...)     division
+    (eiv p0 p1 p2 ...) (\\ p0 p1 p2 ...)    exact division
+    (.xor p0 p1 p2 ...) (^ p0 p1 p2 ...)    bit-wise xor
+    (.and p0 p1 p2 ...) (& p0 p1 p2 ...)    bit-wise and
+    (.or p0 p1 p2 ...) (| p0 p1 p2 ...)     bit-wise or
     (gt p0 p1 p2 ...)                       great-than
     (lt p0 p1 p2 ...)                       less-than
     (gtq p0 p1 p2 ...)                      great-than or equal
@@ -37,62 +40,88 @@ Opreator:
     (eq p0 p1 p2 ...)                       equal
     (and p0 p1 p2 ...)                      logical and
     (or p0 p1 p2 ...)                       logical or
-    (xor p0 p1 p2 ...)                      logical xor
     (nil p0 p1 p2 ...)                      check if value is all Nil
+    (str p0 p1 p2 ...)                      convert to string
+    (join divide p0 p1 p2 ...)              join strings with the "divide" string
 
   Unpackable operator:
-    (_not p0 p1 p2 ...) (~ p0 p1 p2 ...)    bit-wise reverse
+
+    (.not p0 p1 p2 ...) (~ p0 p1 p2 ...)    bit-wise reverse
     (str p0 p1 p2 ...) ($ p0 p1 p2 ...)     to string
     (not p0 p1 p2 ...)                      logical not
 
   Limited member operator:
 
-    (mod a b) (% a b)                 a mod b
-    (shr v c)                         bit-wise shift right v >> c
-    (shl v c)                         bit-wise shift left v << c
-    (if boolean true-exp false-exp)   logical option
+    (mod a b) (% a b)                       a mod b
+    (.shr v c)                              bit-wise shift right v >> c
+    (.shl v c)                              bit-wise shift left v << c
+    (if boolean true-exp false-exp)         condition
+    (clip string start end)                 slice string from start to end
 
 Structure:
 
-    (kv name value)           define key-value paire
-    (li p0 p1 p2 ...)         define list
-    (dict pare0 pare1 ...)    define dictionary
-    (itm index obj)           find member from list, dictionary or Upackable
-    (in index obj)            check if member in list or Upackable. in dictionary it check keys
-                              exists
-    (len obj)                 get length of list, dictionary or Upackable
-    (upd obj p0 p1 p2)        update member to list or dictionary
-    (rm obj key0 key1 ...)    remove member from list or dictionary
-    (keys dict0 dict1 ...)    enum key to a list from dictionary
-    (pars dict0 dict1 ...)    enum key-value paire to a list from dictionary
-    (oder "asc"/"desc" p0 p1 ...)     sorting list
-    (upk obj0 obj1 ...)       unpack all struct to Unpackable (dictionary unpack values)
+    (kv name value)                         define key-value paire
+    (li p0 p1 p2 ...)                       define list
+    (dict pare0 pare1 ...)                  define dictionary
+    (tuple p0 p1 p2 ...) (:= p0 p1 p2 ...)  define tuple
+    (upk p0 p1 p2 ...) (= p0 p1 p2...)      define Unpackable
+    (item index obj)                        find member from list, dictionary or Upackable
+    (in index obj)                          check if member in list or Upackable. in dictionary it
+                                            check keys exists
+    (len obj)                               get length of list, dictionary or Upackable
+    (update obj p0 p1 p2)                   update member to list or dictionary
+    (remove obj key0 key1 ...)              remove member from list or dictionary
+    (keys dict0 dict1 ...)                  enum key to a list from dictionary
+    (pairs dict0 dict1 ...)                 enum key-value paire to a list from dictionary
+    (unpack p0 p1 p2 ...) (: p0 p1 p2 ...)  unpack all struct to Unpackable (dictionary unpack
+                                            values)
 
 Functional:
 
-    (lmd (name-list) (expression...))     lambda exprssion
-    (map (lmd a) p0 p1 p2 ...)            map values
-    (reduce (lmd a b) p0 p1 p2 ...)       reduce values
-    (filter (lmd a b) p0 p1 p2 ...)       filter values
+    (lmd (name-list) (expression...))       lambda exprssion
+    (map (lmd a) p0 p1 p2 ...)              map values
+    (reduce (lmd a b) p0 p1 p2 ...)         reduce values
+    (filter (lmd a b) p0 p1 p2 ...)         filter values
+    (oder (lmd a b) p0 p1 p2 ...)           order values compare with lmd
+    (iter (lmd init...) (lmd next...))      create iterator.
+    (regexp exp)                            create regular-expression
+    (re.match regex string)                 group match string using regular-expression
+    (re.search regex string)                match and clip string using regular-expression
+
+    Note for iterator:
+      An iterator look like a advance function. the input parameter is same as "init", it will pass
+      to "init" function at fist time. return is an Unpackable. 
+      after initalize, some values return from "init" function, there will pass parameter to the
+      "next" function. the returns the first argument from "next" will be unpacking. and all return
+      values will feedback to "next" at next rounds. until only a Nil returned
+
+Common iterator:
+
+    (range start end)                       an integer range from start to end
+    (random count)                          generate count random numbers
+    (charat string)                         enum each character from string
+    (split string sp)                       splite string use keyword sp
 
 Environment:
 
-    (let name expression...)      set expression to current environment
-    (get name) (. name)           get expression from environment
-    (exist name0 name1...)        check names exist
-    (glet name expression...)     set expression for global, if exists it will raise an Exception
-    (gset name expression...)     set or change expression for global (not recommend)
-    (gget name expression...)     force get expression from global
-    (gexist name0 name1...)       check names in global is exist
-    (gdel name0 name1 ...)        delete names in global (not recommend)
+    (let name expression...)                set expression to current environment
+    (get name) (. name)                     get expression from environment
+    (exist name0 name1...)                  check names exist
+    (!let name expression...)               set expression for global, if exists it will raise an
+                                            Exception
+    (!set name expression...)               set or change expression for global (not recommend)
+    (!get name expression...)               force get expression from global
+    (!exist name0 name1...)                 check names in global is exist
+    (!del name0 name1 ...)                  delete names in global (not recommend)
 
 System:
 
-    (include filename filename ...)     include files just like a string
-    (import filename filename ...)      import files as script in current environment
-    (gimport filename filename ...)     import files as script in global enviroment
-    (pcall name p0 p1 p2 ...)           call original python function
-    (pimport module module ...)         import python modules
-    (pypy p0 p1 p2 ...)                 execute string as python script
+    (open filename filename ...)            open and read files just like a string
+    (import filename filename ...)          import files as script in current environment
+    (!import filename filename ...)         import files as script in global enviroment
+    (trans p0 p1 p2 ...)                    translate each string like expression
+    (py.call name p0 p1 p2 ...)             call original python function
+    (py.mod module module ...)              import python modules
+    (py.eval p0 p1 p2 ...)                  execute string as python script
 
 --------------------------------------------------------------------------------------------------
